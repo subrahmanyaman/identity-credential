@@ -20,8 +20,8 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import com.android.identity.TestUtilities;
 
@@ -76,7 +76,7 @@ public class UtilTest {
 
     @Before
     public void setUp() {
-        Security.addProvider(new BouncyCastleProvider());
+        Security.insertProviderAt(new BouncyCastleProvider(), 1);
     }
 
     @After
@@ -392,7 +392,7 @@ public class UtilTest {
 
     private KeyPair generateKeyPair() throws Exception {
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC", BouncyCastleProvider.PROVIDER_NAME);
-        kpg.initialize(new ECGenParameterSpec("secp256k1"));
+        kpg.initialize(new ECGenParameterSpec("secp256r1"));
         return kpg.generateKeyPair();
     }
 
@@ -761,6 +761,18 @@ public class UtilTest {
     }
 
     @Test
+    public void encodeDecodeString() {
+        assertEquals("abc", Util.cborDecodeString(Util.cborEncodeString("abc")));
+        assertEquals("", Util.cborDecodeString(Util.cborEncodeString("")));
+        assertThrows(IllegalArgumentException.class,
+                () -> Util.cborDecodeString(Util.cborEncodeNumber(0L)));
+        assertThrows(IllegalArgumentException.class,
+                () -> Util.cborDecodeString(Util.cborEncodeBytestring(new byte[] {0x53, 0x54, 0x55})));
+        assertThrows(IllegalArgumentException.class,
+                () -> Util.cborDecodeString(Util.cborEncodeBoolean(true)));
+    }
+
+    @Test
     public void checkedLongValue() {
         final DataItem dataItem = new co.nstant.in.cbor.model.UnsignedInteger(8675309);
         assertEquals(8675309, Util.checkedLongValue(dataItem));
@@ -796,18 +808,28 @@ public class UtilTest {
             () -> Util.checkedLongValue(new co.nstant.in.cbor.model.NegativeInteger(tooSmall)));
     }
 
-    // TODO: Replace with Assert.assertThrows() once we use a recent enough version of JUnit.
-    /** Asserts that the given {@code runnable} throws the given exception class, or a subclass. */
-    private static void assertThrows(
-            Class<? extends RuntimeException> expected, Runnable runnable) {
-        try {
-            runnable.run();
-            fail("Expected " + expected + " was not thrown");
-        } catch (RuntimeException e) {
-            Class actual = e.getClass();
-            assertTrue("Unexpected Exception class: " + actual,
-                    expected.isAssignableFrom(actual));
-        }
+    @Test
+    public void encodeDecodeLong() {
+        assertEquals(83L, Util.cborDecodeLong(Util.cborEncodeNumber(83L)));
+        assertEquals(0L, Util.cborDecodeLong(Util.cborEncodeNumber(0L)));
+        assertThrows(IllegalArgumentException.class,
+                () -> Util.cborDecodeLong(Util.cborEncodeString("0L")));
+        assertThrows(IllegalArgumentException.class,
+                () -> Util.cborDecodeLong(Util.cborEncodeBytestring(new byte[] {0x53, 0x54, 0x55})));
+        assertThrows(IllegalArgumentException.class,
+                () -> Util.cborDecodeLong(Util.cborEncodeBoolean(true)));
+    }
+
+    @Test
+    public void encodeDecodeBoolean() {
+        assertTrue(Util.cborDecodeBoolean(Util.cborEncodeBoolean(true)));
+        assertFalse(Util.cborDecodeBoolean(Util.cborEncodeBoolean(false)));
+        assertThrows(IllegalArgumentException.class,
+                () -> Util.cborDecodeBoolean(Util.cborEncodeString("test")));
+        assertThrows(IllegalArgumentException.class,
+                () -> Util.cborDecodeBoolean(Util.cborEncodeBytestring(new byte[] {0x53, 0x54, 0x55})));
+        assertThrows(IllegalArgumentException.class,
+                () -> Util.cborDecodeBoolean(Util.cborEncodeNumber(83L)));
     }
 
     @Test

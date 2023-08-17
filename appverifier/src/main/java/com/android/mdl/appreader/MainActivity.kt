@@ -4,43 +4,39 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.nfc.NfcAdapter
 import android.os.Bundle
-import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.GravityCompat
+import androidx.navigation.Navigation
 import androidx.navigation.findNavController
 import androidx.navigation.ui.AppBarConfiguration
+import androidx.navigation.ui.NavigationUI
 import androidx.navigation.ui.navigateUp
 import androidx.navigation.ui.setupActionBarWithNavController
+import androidx.navigation.ui.setupWithNavController
+import com.android.mdl.appreader.databinding.ActivityMainBinding
+import com.android.mdl.appreader.util.logDebug
 import com.google.android.material.elevation.SurfaceColors
 import java.security.Security
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 
 class MainActivity : AppCompatActivity() {
 
-    companion object {
-        private const val LOG_TAG = "MainActivity"
-    }
+    private lateinit var binding: ActivityMainBinding
 
-    private lateinit var appBarConfiguration: AppBarConfiguration
     private var mAdapter: NfcAdapter? = null
     private var mPendingIntent: PendingIntent? = null
+    private val navController by lazy {
+        Navigation.findNavController(this, R.id.nav_host_fragment)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val color = SurfaceColors.SURFACE_2.getColor(this)
         window.statusBarColor = color
         window.navigationBarColor = color
-        setContentView(R.layout.activity_main)
-
-        val navController = findNavController(R.id.nav_host_fragment)
-        appBarConfiguration = AppBarConfiguration(
-            setOf(
-                R.id.RequestOptions,
-                R.id.SelectTransport,
-                R.id.ShowDocument,
-                R.id.Transfer
-            )
-        )
-        setupActionBarWithNavController(navController, appBarConfiguration)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        setupDrawerLayout()
 
         mAdapter = NfcAdapter.getDefaultAdapter(this)
         // Create a generic PendingIntent that will be deliver to this activity. The NFC stack
@@ -52,6 +48,11 @@ class MainActivity : AppCompatActivity() {
         mPendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
         Security.addProvider(BouncyCastleProvider())
+    }
+
+    private fun setupDrawerLayout() {
+        binding.nvSideDrawer.setupWithNavController(navController)
+        NavigationUI.setupActionBarWithNavController(this, navController, binding.dlMainDrawer)
     }
 
     override fun onResume() {
@@ -66,12 +67,18 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        Log.d(LOG_TAG, "New intent on Activity $intent")
+        logDebug("New intent on Activity $intent")
     }
 
     override fun onSupportNavigateUp(): Boolean {
-        val navController = findNavController(R.id.nav_host_fragment)
-        return navController.navigateUp(appBarConfiguration)
-                || super.onSupportNavigateUp()
+        return NavigationUI.navigateUp(navController, binding.dlMainDrawer)
+    }
+
+    override fun onBackPressed() {
+        if (binding.dlMainDrawer.isDrawerOpen(GravityCompat.START)) {
+            binding.dlMainDrawer.closeDrawer(GravityCompat.START)
+        } else {
+            super.onBackPressed()
+        }
     }
 }

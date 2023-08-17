@@ -72,6 +72,10 @@ public class NfcEnagementHelperTest {
 
         NfcEngagementHelper.Listener listener = new NfcEngagementHelper.Listener() {
             @Override
+            public void onTwoWayEngagementDetected() {
+            }
+
+            @Override
             public void onDeviceConnecting() {
 
             }
@@ -89,7 +93,7 @@ public class NfcEnagementHelperTest {
         Executor executor = Executors.newSingleThreadExecutor();
         NfcEngagementHelper.Builder builder = new NfcEngagementHelper.Builder(
                 context,
-                session,
+                session.getEphemeralKeyPair().getPublic(),
                 new DataTransportOptions.Builder().build(),
                 listener,
                 executor);
@@ -205,6 +209,10 @@ public class NfcEnagementHelperTest {
 
         NfcEngagementHelper.Listener listener = new NfcEngagementHelper.Listener() {
             @Override
+            public void onTwoWayEngagementDetected() {
+            }
+
+            @Override
             public void onDeviceConnecting() {
 
             }
@@ -221,7 +229,7 @@ public class NfcEnagementHelperTest {
         Executor executor = Executors.newSingleThreadExecutor();
         NfcEngagementHelper.Builder builder = new NfcEngagementHelper.Builder(
                 context,
-                session,
+                session.getEphemeralKeyPair().getPublic(),
                 new DataTransportOptions.Builder().build(),
                 listener,
                 executor);
@@ -306,8 +314,8 @@ public class NfcEnagementHelperTest {
         Assert.assertEquals(0x10, spr.tnepVersion);
         Assert.assertEquals("urn:nfc:sn:handover", spr.serviceNameUri);
         Assert.assertEquals(0x00, spr.tnepCommunicationMode);
-        Assert.assertEquals(0.5, spr.tWaitMillis, 0.001);
-        Assert.assertEquals(0, spr.nWait);
+        Assert.assertEquals(8.0, spr.tWaitMillis, 0.001);
+        Assert.assertEquals(15, spr.nWait);
 
         // Keep the following code in sync with verificationHelper.startNegotiatedHandover()
 

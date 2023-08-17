@@ -21,6 +21,7 @@ import androidx.annotation.Nullable;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.android.identity.securearea.SecureArea;
 import com.android.identity.util.Logger;
 import com.android.identity.util.Timestamp;
 import org.bouncycastle.asn1.ASN1Encodable;
@@ -40,9 +41,11 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.AlgorithmParameters;
+import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.MessageDigest;
@@ -244,7 +247,13 @@ public class Util {
     }
 
     public static boolean cborDecodeBoolean(@NonNull byte[] data) {
-        SimpleValue simple = (SimpleValue) cborDecode(data);
+        SimpleValue simple;
+        try {
+            simple = (SimpleValue) cborDecode(data);
+        } catch (ClassCastException e) {
+            throw new IllegalArgumentException("Data given cannot be cast into a boolean.", e);
+        }
+
         return simple.getSimpleValueType() == SimpleValueType.TRUE;
     }
 
@@ -576,6 +585,61 @@ public class Util {
         } catch (SignatureException e) {
             throw new IllegalStateException("Error signing data", e);
         }
+
+        CborBuilder builder = new CborBuilder();
+        ArrayBuilder<CborBuilder> array = builder.addArray();
+        array.add(protectedHeadersBytes);
+        MapBuilder<ArrayBuilder<CborBuilder>> unprotectedHeaders = array.addMap();
+        try {
+            if (certificateChain != null && certificateChain.size() > 0) {
+                if (certificateChain.size() == 1) {
+                    X509Certificate cert = certificateChain.iterator().next();
+                    unprotectedHeaders.put(COSE_LABEL_X5CHAIN, cert.getEncoded());
+                } else {
+                    ArrayBuilder<MapBuilder<ArrayBuilder<CborBuilder>>> x5chainsArray =
+                            unprotectedHeaders.putArray(COSE_LABEL_X5CHAIN);
+                    for (X509Certificate cert : certificateChain) {
+                        x5chainsArray.add(cert.getEncoded());
+                    }
+                }
+            }
+        } catch (CertificateEncodingException e) {
+            throw new IllegalStateException("Error encoding certificate", e);
+        }
+        if (data == null || data.length == 0) {
+            array.add(new SimpleValue(SimpleValueType.NULL));
+        } else {
+            array.add(data);
+        }
+        array.add(coseSignature);
+
+        return builder.build().get(0);
+    }
+
+    public static @NonNull
+    DataItem coseSign1Sign(@NonNull SecureArea secureArea,
+                           @NonNull String alias,
+                           @SecureArea.Algorithm int signatureAlgorithm,
+                           @Nullable SecureArea.KeyUnlockData keyUnlockData,
+                           @Nullable byte[] data,
+                           @Nullable byte[] detachedContent,
+                           @Nullable Collection<X509Certificate> certificateChain)
+            throws SecureArea.KeyLockedException {
+
+        int dataLen = (data != null ? data.length : 0);
+        int detachedContentLen = (detachedContent != null ? detachedContent.length : 0);
+        if (dataLen > 0 && detachedContentLen > 0) {
+            throw new IllegalArgumentException("data and detachedContent cannot both be non-empty");
+        }
+
+        CborBuilder protectedHeaders = new CborBuilder();
+        MapBuilder<CborBuilder> protectedHeadersMap = protectedHeaders.addMap();
+        protectedHeadersMap.put(COSE_LABEL_ALG, signatureAlgorithm);
+        byte[] protectedHeadersBytes = cborEncode(protectedHeaders.build().get(0));
+
+        byte[] toBeSigned = coseBuildToBeSigned(protectedHeadersBytes, data, detachedContent);
+        byte[] derSignature = secureArea.sign(alias, signatureAlgorithm, toBeSigned, keyUnlockData);
+        byte[] coseSignature = signatureDerToCose(derSignature, 32); // TODO: infer from alias
 
         CborBuilder builder = new CborBuilder();
         ArrayBuilder<CborBuilder> array = builder.addArray();
@@ -1097,6 +1161,11 @@ public class Util {
             throw new IllegalArgumentException("Expected item");
         }
         return item;
+    }
+
+    public static
+    @SecureArea.EcCurve int coseKeyGetCurve(@NonNull DataItem coseKey) {
+        return (int) cborMapExtractNumber(coseKey, COSE_KEY_EC2_CRV);
     }
 
     public static @NonNull
@@ -1875,6 +1944,46 @@ public class Util {
                     + "characteristic value size", mtuSize, characteristicValueSize));
         }
         return characteristicValueSize;
+    }
+
+    public static @NonNull KeyPair createEphemeralKeyPair(@SecureArea.EcCurve int curve) {
+        String stdName;
+        switch (curve) {
+            case SecureArea.EC_CURVE_P256:
+                stdName = "secp256r1";
+                break;
+            case SecureArea.EC_CURVE_P384:
+                stdName = "secp384r1";
+                break;
+            case SecureArea.EC_CURVE_P521:
+                stdName = "secp521r1";
+                break;
+            case SecureArea.EC_CURVE_BRAINPOOLP256R1:
+                stdName = "brainpoolP256r1";
+                break;
+            case SecureArea.EC_CURVE_BRAINPOOLP320R1:
+                stdName = "brainpoolP320r1";
+                break;
+            case SecureArea.EC_CURVE_BRAINPOOLP384R1:
+                stdName = "brainpoolP384r1";
+                break;
+            case SecureArea.EC_CURVE_BRAINPOOLP512R1:
+                stdName = "brainpoolP512r1";
+                break;
+            default:
+                throw new IllegalArgumentException("curve provided is not one of the supported curves");
+        }
+
+        try {
+            KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
+            ECGenParameterSpec ecSpec = new ECGenParameterSpec(stdName);
+            kpg.initialize(ecSpec);
+            KeyPair keyPair = kpg.generateKeyPair();
+            return keyPair;
+        } catch (NoSuchAlgorithmException
+                 | InvalidAlgorithmParameterException e) {
+            throw new IllegalStateException("Error generating ephemeral key-pair", e);
+        }
     }
 
 }

@@ -16,13 +16,16 @@
 
 package com.android.identity.mdoc.sessionencryption;
 
-import com.android.identity.TestUtilities;
 import com.android.identity.TestVectors;
 import com.android.identity.internal.Util;
+import com.android.identity.securearea.SecureArea;
 import com.android.identity.mdoc.engagement.EngagementParser;
 import com.android.identity.util.Constants;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -30,6 +33,7 @@ import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.Security;
 import java.util.OptionalLong;
 
 import co.nstant.in.cbor.model.Array;
@@ -37,6 +41,16 @@ import co.nstant.in.cbor.model.ByteString;
 import co.nstant.in.cbor.model.DataItem;
 
 public class SessionEncryptionTest {
+
+    @Before
+    public void setUp() {
+        Security.insertProviderAt(new BouncyCastleProvider(), 1);
+    }
+
+    @After
+    public void tearDown() {
+        Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
+    }
 
     @Test
     public void testReaderAgainstVectors() {
@@ -157,10 +171,10 @@ public class SessionEncryptionTest {
                 sessionEncryptionDevice.encryptMessage(null, OptionalLong.of(20)));
     }
 
-    private void testCurve(@Constants.EcCurve int curve) {
-        KeyPair eReaderKeyPair = TestUtilities.createEphemeralKeyPair(curve);
+    private void testCurve(@SecureArea.EcCurve int curve) {
+        KeyPair eReaderKeyPair = Util.createEphemeralKeyPair(curve);
         PublicKey eReaderKeyPublic = eReaderKeyPair.getPublic();
-        KeyPair eDeviceKeyPair = TestUtilities.createEphemeralKeyPair(curve);
+        KeyPair eDeviceKeyPair = Util.createEphemeralKeyPair(curve);
         PublicKey eDeviceKeyPublic = eDeviceKeyPair.getPublic();
         PrivateKey eDeviceKeyPrivate = eDeviceKeyPair.getPrivate();
 
@@ -240,7 +254,7 @@ public class SessionEncryptionTest {
         testCurve(Constants.EC_CURVE_BRAINPOOLP512R1);
     }
 
-    // TODO add these back in after Keystore abstraction is merged
+    // TODO: remove @Ignore once ED25519 / ED448 is no longer buggy
     @Ignore
     @Test
     public void testEd25519() {
