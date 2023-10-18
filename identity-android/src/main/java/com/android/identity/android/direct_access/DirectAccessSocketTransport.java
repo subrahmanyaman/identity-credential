@@ -63,7 +63,10 @@ public class DirectAccessSocketTransport implements DirectAccessTransport {
 
   @Override
   public void closeConnection() throws IOException {
-    mSocket.close();
+    if (mSocket != null) {
+      mSocket.close();
+      mSocket = null;
+    }
     socketStatus = false;
   }
 

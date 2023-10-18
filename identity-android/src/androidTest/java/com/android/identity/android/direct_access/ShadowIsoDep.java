@@ -1,96 +1,87 @@
 package com.android.identity.android.direct_access;
 
+import android.nfc.Tag;
+import com.android.identity.android.mdoc.deviceretrieval.IsoDepWrapper;
 import java.io.IOException;
 
-public class ShadowIsoDep {
+public class ShadowIsoDep implements IsoDepWrapper {
 
-  private static final String TAG = "NFC";
-  boolean mIsConnected;
-  int mTimeout;
+  public static String TECH_ISO_DEP = "android.nfc.tech.IsoDep";
 
-  ShadowIsoDep() {
-    mTimeout = 36000000;
+  private DirectAccessTransport mTransport;
+  private int mTimeout;
+
+  public ShadowIsoDep(DirectAccessTransport transport) {
+    mTransport = transport;
   }
 
-  public ShadowIsoDep getTag() {
-    return this;
-  }
-
-  void checkConnected() {
-  }
-
-  public boolean isConnected() {
-    return true;
-  }
-
-  public void connect() throws IOException {
-    // This method actually establishes/connects to correct RF Interface in NCI.
-    // Nothing to be done for the unit test cases - in rel device this will be
-    // done by BasicTechnologyTag class using the TagService implemented by the NfcService
-    //MdlTest.connectTag();
-  }
-
-  public void reconnect() throws IOException {
-    // Same as connect
-    //MdlTest.reconnectTag();
-  }
-
-  public void close() throws IOException {
-    // Same as connect
-    //MdlTest.closeTag();
-  }
-
-  int getMaxTransceiveLengthInternal() {
-    //This comes from the NDEF File. Currently, just hard coding it for unit testcases.
-    //return MdlTest.maxTransceiveLength();
-    return 0;
-  }
-  // This is the main adaptation for JUnit test case
-  byte[] transceive(byte[] data, boolean raw) throws Exception {
-    // checkConnected();
-    // CommandAPDU apdu = MdlTest.getCommandApdu(data);
-    // ResponseAPDU resp = MdlTest.transmitCommand(apdu);
-    // SEProvider.print(apdu.getBytes(), (short)0, (short) apdu.getBytes().length);
-    // return resp.getBytes();
+  @Override
+  public Tag getTag() {
+    //android.nfc.tech.IsoDep
+    //
     return null;
   }
 
+  @Override
+  public void getIsoDep(Tag tag) {
+  }
 
-  /** @hide */
-  public static final String EXTRA_HI_LAYER_RESP = "hiresp";
-  /** @hide */
-  public static final String EXTRA_HIST_BYTES = "histbytes";
+  @Override
+  public boolean isConnected() {
+    try {
+      return mTransport.isConnected();
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
 
-  private byte[] mHiLayerResponse = null;
-  private byte[] mHistBytes = null;
+  @Override
+  public void connect() throws IOException {
+    mTransport.openConnection();
+  }
 
+  @Override
+  public void close() throws IOException {
+    mTransport.closeConnection();
+  }
+
+  @Override
+  public boolean isTagSupported() {
+    return true;
+  }
+
+  @Override
   public void setTimeout(int timeout) {
     mTimeout = timeout;
   }
 
+  @Override
   public int getTimeout() {
     return mTimeout;
   }
 
+  @Override
   public byte[] getHistoricalBytes() {
-    return mHistBytes;
+    return new byte[0];
   }
 
+  @Override
   public byte[] getHiLayerResponse() {
-    return mHiLayerResponse;
+    return new byte[0];
   }
 
-  public byte[] transceive(byte[] data) throws Exception {
-    return transceive(data, true);
-  }
-
+  @Override
   public int getMaxTransceiveLength() {
-    return getMaxTransceiveLengthInternal();
+    return 0;
   }
 
+  @Override
+  public byte[] transceive(byte[] data) throws IOException {
+    return mTransport.sendData(data);
+  }
+
+  @Override
   public boolean isExtendedLengthApduSupported() {
-    //return MdlTest.isExtendedLengthApduSupported();
-    return false;
+    return true;
   }
-
 }

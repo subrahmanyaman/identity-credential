@@ -28,6 +28,7 @@ import android.util.Pair;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.identity.android.mdoc.deviceretrieval.IsoDepWrapper;
 import com.android.identity.android.util.NfcUtil;
 import com.android.identity.mdoc.connectionmethod.ConnectionMethod;
 import com.android.identity.mdoc.connectionmethod.ConnectionMethodNfc;
@@ -51,7 +52,7 @@ import java.util.concurrent.TimeUnit;
 public class DataTransportNfc extends DataTransport {
     private static final String TAG = "DataTransportNfc";
     private final ConnectionMethodNfc mConnectionMethod;
-    IsoDep mIsoDep;
+    IsoDepWrapper mIsoDep;
     ArrayList<byte[]> mListenerRemainingChunks;
     int mListenerTotalChunks;
     int mListenerRemainingBytesAvailable;
@@ -209,7 +210,7 @@ public class DataTransportNfc extends DataTransport {
      *
      * @param isoDep the tag with {@link IsoDep} technology.
      */
-    public void setIsoDep(@NonNull IsoDep isoDep) {
+    public void setIsoDep(@NonNull IsoDepWrapper isoDep) {
         mIsoDep = isoDep;
     }
     

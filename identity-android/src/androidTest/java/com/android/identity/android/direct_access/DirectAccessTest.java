@@ -101,10 +101,12 @@ public abstract class DirectAccessTest {
   protected void reset() {
     if (mDocStore != null) {
       mDocStore.deleteCredential(mDocName);
+      mDocStore = null;
     }
     try {
       if (mTransport != null) {
         mTransport.closeConnection();
+        mTransport = null;
       }
     } catch (IOException e) {
       fail("Unexpected Exception " + e);
