@@ -72,7 +72,7 @@ public class ShadowIsoDep implements IsoDepWrapper {
 
   @Override
   public int getMaxTransceiveLength() {
-    return 0;
+    return mTransport.getMaxTransceiveLength();
   }
 
   @Override

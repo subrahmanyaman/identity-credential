@@ -50,6 +50,12 @@ public class DirectAccessOmapiTransport implements DirectAccessTransport {
     return mEseChannel.isOpen();
   }
 
+  @Override
+  public int getMaxTransceiveLength() {
+    // TODO
+    return 1024;
+  }
+
 
   private Reader getEseReader() {
     if (mSEService == null) {

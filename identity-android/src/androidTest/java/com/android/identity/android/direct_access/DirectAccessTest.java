@@ -10,10 +10,15 @@ import com.android.identity.android.storage.AndroidStorageEngine;
 import com.android.identity.storage.StorageEngine;
 import java.io.File;
 import java.io.IOException;
+import java.security.cert.X509Certificate;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
+import org.junit.Assert;
 
 public abstract class DirectAccessTest {
 
@@ -111,7 +116,32 @@ public abstract class DirectAccessTest {
     } catch (IOException e) {
       fail("Unexpected Exception " + e);
     }
+  }
 
+  protected void provisionAndSwapIn() {
+    mDocName = "mDL";
+    try {
+      waitForConnection();
+      byte[] challenge = "challenge".getBytes();
+      int numSigningKeys = 1;
+      mDocStore = new MDocStore(mTransport, mStorageEngine);
+      MDocCredential credential = mDocStore.createCredential(mDocName,
+          DirectAccessTestUtils.MDL_DOCTYPE, challenge, numSigningKeys, Duration.ofDays(365));
+      List<X509Certificate> certificates = credential.getCredentialKeyCertificateChain();
+      Assert.assertTrue(certificates.size() >= 1);
+      Assert.assertEquals(numSigningKeys, credential.getNumSigningKeys());
+      List<MDocCredential.MDocSigningKeyCertificationRequest> certificationRequests = credential.getSigningKeyCertificationRequests(
+          Duration.ofDays(180));
+      Assert.assertEquals(numSigningKeys, certificationRequests.size());
+      // Provision
+      byte[] encodedCredData = DirectAccessTestUtils.createCredentialData(mContext,
+          certificationRequests.get(0), DirectAccessTestUtils.MDL_DOCTYPE);
+      credential.provision(certificationRequests.get(0), Instant.now(), encodedCredData);
+      // TODO Swap-in flow not tested.
+      credential.swapIn(certificationRequests.get(0));
+    } catch (Exception e) {
+      fail("Unexpected Exception " + e);
+    }
   }
 
 }

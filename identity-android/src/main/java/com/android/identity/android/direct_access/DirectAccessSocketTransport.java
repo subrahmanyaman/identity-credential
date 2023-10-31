@@ -17,9 +17,11 @@ public class DirectAccessSocketTransport implements DirectAccessTransport {
 
   @Override
   public void openConnection() throws IOException {
-    InetAddress serverAddress = InetAddress.getByName(IPADDR);
-    mSocket = new Socket(serverAddress, PORT);
-    socketStatus = true;
+    if (!isConnected()) {
+      InetAddress serverAddress = InetAddress.getByName(IPADDR);
+      mSocket = new Socket(serverAddress, PORT);
+      socketStatus = true;
+    }
   }
 
   @Override
@@ -73,6 +75,11 @@ public class DirectAccessSocketTransport implements DirectAccessTransport {
   @Override
   public boolean isConnected() throws IOException {
     return socketStatus;
+  }
+
+  @Override
+  public int getMaxTransceiveLength() {
+    return MAX_RECV_BUFFER_SIZE;
   }
 
   private byte[] readData() {

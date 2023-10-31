@@ -81,6 +81,11 @@ public class DirectAccessCborHelper {
     return null;
   }
 
+  public boolean isOkResponse(byte[] response) {
+    int status = getApduStatus(response);
+    return DirectAccessAPDUHelper.APDU_RESPONSE_STATUS_OK == status;
+  }
+
   public List<X509Certificate> decodeCredentialKeyResponse(byte[] response) {
     int status = getApduStatus(response);
     if (DirectAccessAPDUHelper.APDU_RESPONSE_STATUS_OK != status) {

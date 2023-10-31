@@ -12,12 +12,12 @@ import co.nstant.in.cbor.model.DataItem;
 import co.nstant.in.cbor.model.Map;
 import co.nstant.in.cbor.model.UnicodeString;
 import co.nstant.in.cbor.model.UnsignedInteger;
+import com.android.identity.android.util.NfcUtil;
 import com.android.identity.internal.Util;
 import com.android.identity.storage.StorageEngine;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateExpiredException;
@@ -33,6 +33,9 @@ import java.util.List;
 public class MDocCredential {
 
   private static final String TAG = "MDocCredential";
+  private static final byte[] DIRECT_ACCESS_PROVISIONING_APPLET_ID = {
+      (byte)0xA0, 0x00, 0x00, 0x04, 0x76, 0x57, 0x56, 0x52, 0x43, 0x4F, 0x52, 0x45,0x30,
+      0x00, 0x01, 0x01};
   private static final String MDOC_CREDENTIAL_PREFIX = "DA_Credential_";
   private static final String MDOC_PREFIX = "DA_AndroidKeystore_";
   private static final long CREDENTIAL_KEY_VALID_DURATION = (365 * 24 * 60 * 60 * 1000);
@@ -56,6 +59,17 @@ public class MDocCredential {
     this.mTransport = mTransport;
   }
 
+  private void selectProvisionApplet() {
+    try {
+      byte[] selectApdu = NfcUtil.createApduApplicationSelect(DIRECT_ACCESS_PROVISIONING_APPLET_ID);
+      byte[] response = mTransport.sendData(selectApdu);
+      if (!mCborHelper.isOkResponse(response)) {
+        throw new IllegalStateException("Failed to select Provision Applet");
+      }
+    } catch (IOException e) {
+      throw new IllegalStateException("Failed to send select Provision Applet APDU command");
+    }
+  }
   public static MDocCredential create(@NonNull String name, @NonNull String docType,
       @NonNull byte[] challenge, int numSigningKeys, @NonNull Duration signingKeyMinValidDuration,
       @NonNull StorageEngine storageEngine, @NonNull DirectAccessTransport transport) {
@@ -74,6 +88,7 @@ public class MDocCredential {
     byte[] apdu = null;
     byte[] response = null;
     try {
+      credential.selectProvisionApplet();
       apdu = credential.mApduHelper.createCredentialAPDU(credential.mSlot, challenge, notBefore, notAfter);
       response = credential.mTransport.sendData(apdu);
       print(response, (short) 0, (short) response.length);
@@ -394,11 +409,20 @@ public class MDocCredential {
     return certificationRequests;
   }
 
-  private byte[] provision(int slot, byte[] data, int offset, int length, byte operation) throws IOException {
-    byte[] beginApdu = mApduHelper.createProvisionApdu(slot,
+  private byte[] sendApdu(int cmd, int slot, byte[] data, int offset, int length, byte operation) throws IOException {
+    selectProvisionApplet();
+    byte[] beginApdu = mApduHelper.createProvisionSwapInApdu(cmd, slot,
         data, 0, length, operation);
     byte[] response = mTransport.sendData(beginApdu);
     return mCborHelper.decodeProvisionResponse(response);
+  }
+
+  private byte[] provision(int slot, byte[] data, int offset, int length, byte operation) throws IOException {
+    return sendApdu(DirectAccessAPDUHelper.CMD_MDOC_PROVISION_DATA, slot, data, offset, length, operation);
+  }
+
+  private byte[] swapIn(int slot, byte[] data, int offset, int length, byte operation) throws IOException {
+    return sendApdu(DirectAccessAPDUHelper.CMD_MDOC_SWAP_IN, slot, data, offset, length, operation);
   }
 
   // Provisions credential data for a specific signing key request.
@@ -459,6 +483,35 @@ public class MDocCredential {
     saveEncryptedDataPresentationPackage(request, bao.toByteArray(), expirationDate);
   }
 
+  public void swapIn(MDocSigningKeyCertificationRequest request) {
+    ByteArrayOutputStream bao = new ByteArrayOutputStream();
+    try {
+      byte[] encryptedData = getEncryptedDataPresentationPackage(request);
+      int remaining = encryptedData.length;
+      int start = 0;
+      int maxTransmitBufSize = 512;
+      // BEGIN
+      bao.write(swapIn(SLOT_0,
+          encryptedData, 0, maxTransmitBufSize, PROVISION_BEGIN));
+      start += maxTransmitBufSize;
+      remaining -= maxTransmitBufSize;
+
+      // UPDATE
+      while(remaining > maxTransmitBufSize) {
+        bao.write(swapIn(SLOT_0,
+            encryptedData, start, maxTransmitBufSize, PROVISION_UPDATE));
+        start += maxTransmitBufSize;
+        remaining -= maxTransmitBufSize;
+      }
+
+      // Finish
+      bao.write(swapIn(SLOT_0,
+          encryptedData, start, remaining, PROVISION_FINISH));
+    } catch (IOException e) {
+      throw new IllegalStateException("Failed to provision credential data "+e);
+    }
+  }
+
   public static class MDocSigningKeyCertificationRequest {
     private X509Certificate mSigningCertificate;
 
@@ -503,6 +556,7 @@ public class MDocCredential {
 
   void deleteCredential() {
     try {
+      selectProvisionApplet();
       byte[] apdu = mApduHelper.deleteMDocAPDU(mSlot);
       byte[] response = mTransport.sendData(apdu);
       mCborHelper.decodeDeleteCredential(response);

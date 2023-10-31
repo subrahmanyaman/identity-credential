@@ -431,7 +431,7 @@ public class VerificationHelper {
             }
         } while (true);
 
-        apdu = NfcUtil.createApduReadBinary(0x0002, replyLen - 0x0002);
+        apdu = NfcUtil.createApduReadBinary(0x0002, replyLen);
         ret = transceive(isoDep, apdu);
         if (ret.length != replyLen + 2 || ret[replyLen] != ((byte) 0x90) || ret[replyLen + 1] != ((byte) 0x00)) {
             Logger.eHex(TAG, "Malformed response for second READ_BINARY command for payload, ret", ret);

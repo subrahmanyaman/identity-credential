@@ -12,4 +12,6 @@ public interface DirectAccessTransport {
 
   boolean isConnected() throws IOException;
 
+  int getMaxTransceiveLength();
+
 }

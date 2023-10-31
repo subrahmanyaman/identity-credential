@@ -9,14 +9,14 @@ import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.Calendar;
 import org.bouncycastle.asn1.ASN1UTCTime;
-import org.bouncycastle.util.Arrays;
 
 public class DirectAccessAPDUHelper {
-
   public static final int CMD_MDOC_CREATE = 0x01;
   public static final int CMD_MDOC_CREATE_PRESENTATION_PKG = 0x07;
   public static final int CMD_MDOC_DELETE_CREDENTIAL = 0x08;
   public static final int CMD_MDOC_PROVISION_DATA = 0x09;
+
+  public static final int CMD_MDOC_SWAP_IN = 0x06;
   public final static byte INS_ENVELOPE = (byte) 0xC3;
   public static final int APDU_RESPONSE_STATUS_OK = 0x9000;
 
@@ -182,14 +182,14 @@ public class DirectAccessAPDUHelper {
     return makeCommandApdu(bos.toByteArray());
   }
 
-  public byte[] createProvisionApdu(int slot, byte[] data, int offset, int length, byte operation) throws IOException {
+  public byte[] createProvisionSwapInApdu(int cmd, int slot, byte[] data, int offset, int length, byte operation) throws IOException {
     ByteBuffer bb = ByteBuffer.allocate(length);
     bb.put(data, offset, length);
     byte[] scratchpad = new byte[2];
 
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     // set instruction
-    setShort(scratchpad, 0, (short) CMD_MDOC_PROVISION_DATA);
+    setShort(scratchpad, 0, (short) cmd);
     bos.write(scratchpad);
 
     bos.write(slot);
