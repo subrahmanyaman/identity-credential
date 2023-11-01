@@ -13,6 +13,7 @@ import com.android.identity.android.mdoc.deviceretrieval.IsoDepWrapper;
 import com.android.identity.android.mdoc.deviceretrieval.VerificationHelper;
 import com.android.identity.android.mdoc.transport.DataTransportOptions;
 import com.android.identity.mdoc.connectionmethod.ConnectionMethod;
+import com.android.identity.mdoc.response.DeviceResponseParser;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -145,6 +146,14 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
     }
   };
 
+  private DeviceResponseParser.DeviceResponse parseDeviceResponse(byte[] deviceResponse) {
+    DeviceResponseParser parser = new DeviceResponseParser();
+    parser.setSessionTranscript(mVerificationHelper.getSessionTranscript());
+    parser.setEphemeralReaderKey(mVerificationHelper.getEphemeralReaderKey());
+    parser.setDeviceResponse(deviceResponse);
+    return parser.parse();
+  }
+
   public static IsoDep mIsoDep;
   Handler mHandler;
   final Handler.Callback cb = new Handler.Callback() {
@@ -167,6 +176,8 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
         case DEVICE_RESPONSE_RECEIVED:
           // TODO Validate the response.
           Assert.assertNotNull(mDeviceResponse);
+          DeviceResponseParser.DeviceResponse dr = parseDeviceResponse(mDeviceResponse);
+          Assert.assertNotNull(dr);
           mCountDownLatch.countDown();
           return true;
         case DISCONNECTED:
