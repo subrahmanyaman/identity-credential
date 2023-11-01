@@ -111,8 +111,11 @@ public class DirectAccessCborHelper {
     if (DirectAccessAPDUHelper.APDU_RESPONSE_STATUS_OK != status) {
       throw new IllegalStateException("Begin Provision failed. Response status: "+ status);
     }
-    byte[] input = Arrays.copyOf(response, response.length-2);
-    return Util.cborDecodeByteString(input);
+    if (response.length > 2) {
+      byte[] input = Arrays.copyOf(response, response.length - 2);
+      return Util.cborDecodeByteString(input);
+    }
+    return null;
   }
 
   public void decodeDeleteCredential(byte[] response) {

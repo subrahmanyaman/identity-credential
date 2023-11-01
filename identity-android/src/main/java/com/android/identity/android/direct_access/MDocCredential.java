@@ -412,7 +412,7 @@ public class MDocCredential {
   private byte[] sendApdu(int cmd, int slot, byte[] data, int offset, int length, byte operation) throws IOException {
     selectProvisionApplet();
     byte[] beginApdu = mApduHelper.createProvisionSwapInApdu(cmd, slot,
-        data, 0, length, operation);
+        data, offset, length, operation);
     byte[] response = mTransport.sendData(beginApdu);
     return mCborHelper.decodeProvisionResponse(response);
   }
@@ -464,19 +464,20 @@ public class MDocCredential {
           encryptedData, 0, encryptedData.length, PROVISION_BEGIN));
 
       // UPDATE
-      int remaining = credentialData.length;
+      byte[] encodedCredData = Util.cborEncodeBytestring(credentialData);
+      int remaining = encodedCredData.length;
       int start = 0;
       int maxTransmitBufSize = 512;
       while(remaining > maxTransmitBufSize) {
         bao.write(provision(SLOT_0,
-            credentialData, start, maxTransmitBufSize, PROVISION_UPDATE));
+            encodedCredData, start, maxTransmitBufSize, PROVISION_UPDATE));
         start += maxTransmitBufSize;
         remaining -= maxTransmitBufSize;
       }
 
       // Finish
       bao.write(provision(SLOT_0,
-          credentialData, start, remaining, PROVISION_FINISH));
+          encodedCredData, start, remaining, PROVISION_FINISH));
     } catch (IOException e) {
       throw new IllegalStateException("Failed to provision credential data "+e);
     }
@@ -484,29 +485,28 @@ public class MDocCredential {
   }
 
   public void swapIn(MDocSigningKeyCertificationRequest request) {
-    ByteArrayOutputStream bao = new ByteArrayOutputStream();
     try {
       byte[] encryptedData = getEncryptedDataPresentationPackage(request);
       int remaining = encryptedData.length;
       int start = 0;
       int maxTransmitBufSize = 512;
       // BEGIN
-      bao.write(swapIn(SLOT_0,
-          encryptedData, 0, maxTransmitBufSize, PROVISION_BEGIN));
+      swapIn(SLOT_0,
+          encryptedData, 0, maxTransmitBufSize, PROVISION_BEGIN);
       start += maxTransmitBufSize;
       remaining -= maxTransmitBufSize;
 
       // UPDATE
       while(remaining > maxTransmitBufSize) {
-        bao.write(swapIn(SLOT_0,
-            encryptedData, start, maxTransmitBufSize, PROVISION_UPDATE));
+        swapIn(SLOT_0,
+            encryptedData, start, maxTransmitBufSize, PROVISION_UPDATE);
         start += maxTransmitBufSize;
         remaining -= maxTransmitBufSize;
       }
 
       // Finish
-      bao.write(swapIn(SLOT_0,
-          encryptedData, start, remaining, PROVISION_FINISH));
+      swapIn(SLOT_0,
+          encryptedData, start, remaining, PROVISION_FINISH);
     } catch (IOException e) {
       throw new IllegalStateException("Failed to provision credential data "+e);
     }
