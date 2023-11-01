@@ -157,16 +157,17 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
           mVerificationHelper.connect(mConnectionMethods.get(0));
           byte[] devReq = fromHex(ISO_18013_5_ANNEX_D_DEVICE_REQUEST);
           // send device request
-          // TODO : Validate the response.
           mVerificationHelper.sendRequest(devReq);
           return true;
         case ERROR:
           Bundle bundle = msg.getData();
-          //fail(bundle.getString("Error"));
+          fail(bundle.getString("Error"));
           mCountDownLatch.countDown();
           return true;
         case DEVICE_RESPONSE_RECEIVED:
-          // Validate the response.
+          // TODO Validate the response.
+          Assert.assertNotNull(mDeviceResponse);
+          mCountDownLatch.countDown();
           return true;
         case DISCONNECTED:
           mCountDownLatch.countDown();
