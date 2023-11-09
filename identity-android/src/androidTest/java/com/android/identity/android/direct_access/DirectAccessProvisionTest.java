@@ -43,7 +43,7 @@ public class DirectAccessProvisionTest extends DirectAccessTest {
       int numSigningKeys = 1;
       mDocStore = new MDocStore(mTransport, mStorageEngine);
       MDocCredential credential = mDocStore.createCredential(mDocName,
-          DirectAccessTestUtils.MDL_DOCTYPE, challenge, numSigningKeys, Duration.ofDays(365));
+          CredentialDataParser.MDL_DOC_TYPE, challenge, numSigningKeys, Duration.ofDays(365));
       List<X509Certificate> certificates = credential.getCredentialKeyCertificateChain();
       Assert.assertTrue(certificates.size() >= 1);
       Assert.assertEquals(numSigningKeys, credential.getNumSigningKeys());
@@ -52,7 +52,7 @@ public class DirectAccessProvisionTest extends DirectAccessTest {
       Assert.assertEquals(numSigningKeys, certificationRequests.size());
       // Provision
       byte[] encodedCredData = DirectAccessTestUtils.createCredentialData(mContext,
-          certificationRequests.get(0), DirectAccessTestUtils.MDL_DOCTYPE);
+          certificationRequests.get(0), CredentialDataParser.MDL_DOC_TYPE);
       credential.provision(certificationRequests.get(0), Instant.now(), encodedCredData);
     } catch (Exception e) {
       fail("Unexpected Exception " + e);

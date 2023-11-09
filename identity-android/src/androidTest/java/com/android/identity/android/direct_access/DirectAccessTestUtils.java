@@ -3,52 +3,33 @@ package com.android.identity.android.direct_access;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.icu.util.Calendar;
 import android.security.keystore.KeyProperties;
 import co.nstant.in.cbor.CborBuilder;
-import co.nstant.in.cbor.CborEncoder;
-import co.nstant.in.cbor.CborException;
-import co.nstant.in.cbor.builder.ArrayBuilder;
-import co.nstant.in.cbor.builder.MapBuilder;
-import co.nstant.in.cbor.model.Array;
 import co.nstant.in.cbor.model.DataItem;
 import co.nstant.in.cbor.model.UnicodeString;
 import com.android.identity.android.legacy.AccessControlProfile;
 import com.android.identity.android.legacy.AccessControlProfileId;
 import com.android.identity.android.legacy.PersonalizationData;
 import com.android.identity.internal.Util;
-import com.android.identity.mdoc.mso.MobileSecurityObjectGenerator;
-import com.android.identity.util.Timestamp;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.PublicKey;
-import java.security.SecureRandom;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 public class DirectAccessTestUtils {
-  public static String MDL_NAMESPACE = "org.iso.18013.5.1";
-  public static String MDL_DOCTYPE = "org.iso.18013.5.1.mDL";
+
   private static KeyPair generateIssuingAuthorityKeyPair() throws Exception {
     KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC);
     ECGenParameterSpec ecSpec = new ECGenParameterSpec("prime256v1");
@@ -56,7 +37,8 @@ public class DirectAccessTestUtils {
     return kpg.generateKeyPair();
   }
 
-  private static X509Certificate getSelfSignedIssuerAuthorityCertificate(KeyPair issuerAuthorityKeyPair)
+  private static X509Certificate getSelfSignedIssuerAuthorityCertificate(
+      KeyPair issuerAuthorityKeyPair)
       throws Exception {
     X500Name issuer = new X500Name("CN=State Of Utopia");
     X500Name subject = new X500Name("CN=State Of Utopia Issuing Authority Signing Key");
@@ -83,7 +65,6 @@ public class DirectAccessTestUtils {
     Bitmap bitmapPortrait = BitmapFactory.decodeResource(context.getResources(),
         com.android.identity.test.R.drawable.img_erika_portrait);
 
-    //val iaSelfSignedCert = KeysAndCertificates.getMdlDsCertificate(context)
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     bitmapPortrait.compress(Bitmap.CompressFormat.JPEG, 50, baos);
     byte[] portrait = baos.toByteArray();
@@ -126,20 +107,8 @@ public class DirectAccessTestUtils {
 
   }
 
-  private static byte[] cborEncode(DataItem dataItem) {
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-
-    try {
-      new CborEncoder(baos).encode(dataItem);
-    } catch (CborException e) {
-      // This should never happen and we don't want cborEncode() to throw since that
-      // would complicate all callers. Log it instead.
-      throw new IllegalStateException("Unexpected failure encoding data", e);
-    }
-    return baos.toByteArray();
-  }
-
-  private static PersonalizationData getPersonalizationData(Context context, boolean requireUserAuthentication) {
+  private static PersonalizationData getPersonalizationData(Context context,
+      boolean requireUserAuthentication) {
     AccessControlProfileId idSelf = new AccessControlProfileId(0);
     AccessControlProfile.Builder profileSelfBuilder = new AccessControlProfile.Builder(
         idSelf).setUserAuthenticationRequired(requireUserAuthentication);
@@ -173,174 +142,55 @@ public class DirectAccessTestUtils {
         .put(new UnicodeString("issue_date"), issueDateCatB)
         .put(new UnicodeString("expiry_date"), expiryDateCatB).end().end().build().get(0);
     PersonalizationData personalizationData = new PersonalizationData.Builder().putEntryString(
-            MDL_NAMESPACE, "given_name", idsSelf, hashMap.get("given_name").getValueString())
-        .putEntryString(MDL_NAMESPACE, "family_name", idsSelf,
+            CredentialDataParser.MDL_NAMESPACE, "given_name", idsSelf,
+            hashMap.get("given_name").getValueString())
+        .putEntryString(CredentialDataParser.MDL_NAMESPACE, "family_name", idsSelf,
             hashMap.get("family_name").getValueString())
-        .putEntry(MDL_NAMESPACE, "birth_date", idsSelf, cborEncode(birthDate))
-        .putEntryBytestring(MDL_NAMESPACE, "portrait", idsSelf,
+        .putEntry(CredentialDataParser.MDL_NAMESPACE, "birth_date", idsSelf,
+            Util.cborEncode((birthDate)))
+        .putEntryBytestring(CredentialDataParser.MDL_NAMESPACE, "portrait", idsSelf,
             hashMap.get("portrait").getValueBitmapBytes())
-        .putEntry(MDL_NAMESPACE, "issue_date", idsSelf, cborEncode(issueDate))
-        .putEntry(MDL_NAMESPACE, "expiry_date", idsSelf, cborEncode(expiryDate))
-        .putEntryString(MDL_NAMESPACE, "issuing_country", idsSelf,
+        .putEntry(CredentialDataParser.MDL_NAMESPACE, "issue_date", idsSelf,
+            Util.cborEncode(issueDate))
+        .putEntry(CredentialDataParser.MDL_NAMESPACE, "expiry_date", idsSelf,
+            Util.cborEncode(expiryDate))
+        .putEntryString(CredentialDataParser.MDL_NAMESPACE, "issuing_country", idsSelf,
             hashMap.get("issuing_country").getValueString())
-        .putEntryString(MDL_NAMESPACE, "issuing_authority", idsSelf,
+        .putEntryString(CredentialDataParser.MDL_NAMESPACE, "issuing_authority", idsSelf,
             hashMap.get("issuing_authority").getValueString())
-        .putEntryString(MDL_NAMESPACE, "document_number", idsSelf,
+        .putEntryString(CredentialDataParser.MDL_NAMESPACE, "document_number", idsSelf,
             hashMap.get("document_number").getValueString())
-        .putEntry(MDL_NAMESPACE, "driving_privileges", idsSelf, cborEncode(drivingPrivileges))
-        .putEntryString(MDL_NAMESPACE, "un_distinguishing_sign", idsSelf,
+        .putEntry(CredentialDataParser.MDL_NAMESPACE, "driving_privileges", idsSelf,
+            Util.cborEncode(drivingPrivileges))
+        .putEntryString(CredentialDataParser.MDL_NAMESPACE, "un_distinguishing_sign", idsSelf,
             hashMap.get("un_distinguishing_sign").getValueString())
-        .putEntryBoolean(MDL_NAMESPACE, "age_over_18", idsSelf,
+        .putEntryBoolean(CredentialDataParser.MDL_NAMESPACE, "age_over_18", idsSelf,
             hashMap.get("age_over_18").getValueBoolean())
-        .putEntryBoolean(MDL_NAMESPACE, "age_over_21", idsSelf,
+        .putEntryBoolean(CredentialDataParser.MDL_NAMESPACE, "age_over_21", idsSelf,
             hashMap.get("age_over_21").getValueBoolean())
-        .putEntryBytestring(MDL_NAMESPACE, "signature_usual_mark", idsSelf,
+        .putEntryBytestring(CredentialDataParser.MDL_NAMESPACE, "signature_usual_mark", idsSelf,
             hashMap.get("signature_usual_mark").getValueBitmapBytes())
-        .putEntryInteger(MDL_NAMESPACE, "sex", idsSelf,
+        .putEntryInteger(CredentialDataParser.MDL_NAMESPACE, "sex", idsSelf,
             Integer.valueOf(hashMap.get("sex").getValueString()))
         .addAccessControlProfile(profileSelf).build();
     return personalizationData;
   }
 
-  private static byte[] createMobileSecurityObject(
+
+  public static byte[] createCredentialData(Context context,
       MDocCredential.MDocSigningKeyCertificationRequest authKeyCert,
-      PersonalizationData personalizationData, HashMap<String, List<byte[]>> issuerSignedMapping) {
-    final Timestamp signedDate = Timestamp.now();
-    final Timestamp validFromDate = Timestamp.now();
-    Calendar validToCalendar = Calendar.getInstance();
-    validToCalendar.add(Calendar.MONTH, 12);
-    final Timestamp validToDate = Timestamp.ofEpochMilli(validToCalendar.getTimeInMillis());
-    PublicKey authKey = authKeyCert.getCertificate().getPublicKey();
-
-    MobileSecurityObjectGenerator msoGenerator = new MobileSecurityObjectGenerator("SHA-256",
-        MDL_DOCTYPE, authKey).setValidityInfo(signedDate, validFromDate, validToDate, null);
-
-    Random r = new SecureRandom();
-
-    // Count number of entries and generate digest ids
-    int numEntries = 0;
-    for (PersonalizationData.NamespaceData nsd : personalizationData.getNamespaceDatas()) {
-      numEntries += nsd.getEntryNames().size();
-    }
-    List<Long> digestIds = new ArrayList<>();
-    for (Long n = 0L; n < numEntries; n++) {
-      digestIds.add(n);
-    }
-    Collections.shuffle(digestIds);
-
-    //HashMap<String, List<byte[]>> issuerSignedMapping = new HashMap<>();
-
-    Iterator<Long> digestIt = digestIds.iterator();
-    for (PersonalizationData.NamespaceData nsd : personalizationData.getNamespaceDatas()) {
-      String ns = nsd.getNamespaceName();
-
-      List<byte[]> innerArray = new ArrayList<>();
-
-      Map<Long, byte[]> vdInner = new HashMap<>();
-
-      for (String entry : nsd.getEntryNames()) {
-        byte[] encodedValue = nsd.getEntryValue(entry);
-        Long digestId = digestIt.next();
-        byte[] random = new byte[16];
-        r.nextBytes(random);
-        DataItem value = Util.cborDecode(encodedValue);
-
-        DataItem issuerSignedItem = new CborBuilder().addMap().put("digestID", digestId)
-            .put("random", random).put("elementIdentifier", entry)
-            .put(new UnicodeString("elementValue"), value).end().build().get(0);
-        byte[] encodedIssuerSignedItem = Util.cborEncode(issuerSignedItem);
-
-        byte[] digest = null;
-        byte[] encodedIssuerSignedItemBytes = null;
-        try {
-          // For the digest, it's of the _tagged_ bstr so wrap it
-          encodedIssuerSignedItemBytes = Util.cborEncode(
-              Util.cborBuildTaggedByteString(encodedIssuerSignedItem));
-          //print(encodedIssuerSignedItemBytes);
-          digest = MessageDigest.getInstance("SHA-256").digest(encodedIssuerSignedItemBytes);
-        } catch (NoSuchAlgorithmException e) {
-          throw new IllegalArgumentException("Failed creating digester", e);
-        }
-
-        innerArray.add(encodedIssuerSignedItemBytes);
-
-        vdInner.put(digestId, digest);
-      }
-
-      issuerSignedMapping.put(ns, innerArray);
-
-      msoGenerator.addDigestIdsForNamespace(ns, vdInner);
-    }
-
-    byte[] encodedMobileSecurityObject = msoGenerator.generate();
-
-    byte[] taggedEncodedMso = Util.cborEncode(
-        Util.cborBuildTaggedByteString(encodedMobileSecurityObject));
-    KeyPair issuerAuthorityKeyPair = null;
-    X509Certificate issuerAuthorityCertificate = null;
-    try {
-      issuerAuthorityKeyPair = generateIssuingAuthorityKeyPair();
-    } catch (Exception e) {
-      throw new IllegalStateException("Failed to generate issuing Authority key " + e);
-    }
-    try {
-      issuerAuthorityCertificate = getSelfSignedIssuerAuthorityCertificate(issuerAuthorityKeyPair);
-    } catch (Exception e) {
-      throw new IllegalStateException("Failed to generate self signed cert for IA " + e);
-    }
-
-    // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
-    //
-    // MobileSecurityObjectBytes = #6.24(bstr .cbor MobileSecurityObject)
-    //
-    ArrayList<X509Certificate> issuerAuthorityCertChain = new ArrayList<>();
-    issuerAuthorityCertChain.add(issuerAuthorityCertificate);
-    byte[] encodedIssuerAuth = Util.cborEncode(
-        Util.coseSign1Sign(issuerAuthorityKeyPair.getPrivate(), "SHA256withECDSA", taggedEncodedMso,
-            null, issuerAuthorityCertChain));
-
-    return encodedIssuerAuth;
-  }
-
-  public static byte[] createCredentialData(Context context, MDocCredential.MDocSigningKeyCertificationRequest authKeyCert,
       String docType) {
-    //   CredentialData = {
-    //     "docType": tstr,
-    //     "issuerNameSpaces": IssuerNameSpaces,
-    //     "issuerAuth" : IssuerAuth,
-    //     "readerAccess" : ReaderAccess
-    //   }
-    //
-    //   IssuerNameSpaces = {
-    //     NameSpace => [ + IssuerSignedItemBytes ]
-    //   }
-    //
-    //   ReaderAccess = [ * COSE_Key ]
-    PersonalizationData personalizationData = getPersonalizationData(context,false);
-    HashMap<String, List<byte[]>> issuerSignedMapping = new HashMap<>();
-    byte[] encodedIssuerAuth = createMobileSecurityObject(authKeyCert, personalizationData,
-        issuerSignedMapping);
-
-    CborBuilder digestIdBuilder = new CborBuilder();
-    MapBuilder<CborBuilder> outerBuilder = digestIdBuilder.addMap();
-    for (String namespace : issuerSignedMapping.keySet()) {
-      ArrayBuilder<MapBuilder<CborBuilder>> innerBuilder = outerBuilder.putArray(namespace);
-
-      for (byte[] encodedIssuerSignedItemMetadata : issuerSignedMapping.get(namespace)) {
-        innerBuilder.add(Util.cborDecode(encodedIssuerSignedItemMetadata));
-      }
+    try {
+      KeyPair issuerKeypair = generateIssuingAuthorityKeyPair();
+      return CredentialDataParser.generateCredentialData(
+          docType,
+          getPersonalizationData(context, false),
+          authKeyCert.getCertificate().getPublicKey(),
+          issuerKeypair,
+          getSelfSignedIssuerAuthorityCertificate(issuerKeypair));
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to create CredentialData error: " + e.getMessage());
     }
-    DataItem digestIdMappingItem = digestIdBuilder.build().get(0);
-    // build reader access
-
-    byte[] credentialData = Util.cborEncode(
-        new CborBuilder().addMap().put(new UnicodeString("docType"), new UnicodeString(docType))
-            .put(new UnicodeString("issuerNameSpaces"), digestIdMappingItem)
-            .put(new UnicodeString("issuerAuth"), Util.cborDecode(encodedIssuerAuth))
-            .put(new UnicodeString("readerAccess"), new Array()) // TODO Empty reader access.
-            .end().build().get(0));
-
-    return credentialData;
   }
 
 }

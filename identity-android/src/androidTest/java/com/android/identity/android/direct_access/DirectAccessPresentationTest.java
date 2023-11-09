@@ -154,18 +154,16 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
     return parser.parse();
   }
 
-  public static IsoDep mIsoDep;
   Handler mHandler;
   final Handler.Callback cb = new Handler.Callback() {
     public boolean handleMessage(Message msg) {
-      Log.d(TAG, "Handler Thread id:"+Thread.currentThread().getId());
+      //Log.d(TAG, " handleMessage Thread Id: "+Thread.currentThread().getId());
       switch (msg.what) {
         case DEVICE_ENGAGEMENT_RECEIVED:
           Assert.assertNotNull(mConnectionMethods);
           Assert.assertTrue(mConnectionMethods.size() > 0);
           mVerificationHelper.connect(mConnectionMethods.get(0));
           byte[] devReq = fromHex(ISO_18013_5_ANNEX_D_DEVICE_REQUEST);
-          // send device request
           mVerificationHelper.sendRequest(devReq);
           return true;
         case ERROR:
@@ -178,7 +176,7 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
           Assert.assertNotNull(mDeviceResponse);
           DeviceResponseParser.DeviceResponse dr = parseDeviceResponse(mDeviceResponse);
           Assert.assertNotNull(dr);
-          mCountDownLatch.countDown();
+          mVerificationHelper.disconnect();
           return true;
         case DISCONNECTED:
           mCountDownLatch.countDown();
@@ -191,8 +189,8 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
   @Test
   public void testPresentation() {
     try {
+      //Log.d(TAG, " testPresentation Thread Id: "+Thread.currentThread().getId());
       provisionAndSwapIn();
-      Log.d(TAG, "Thread id:" + Thread.currentThread().getId());
       Executor executor = Executors.newSingleThreadExecutor();
       mHandler = new Handler(mContext.getMainLooper(), cb);
       VerificationHelper.Builder builder = new VerificationHelper.Builder(mContext,

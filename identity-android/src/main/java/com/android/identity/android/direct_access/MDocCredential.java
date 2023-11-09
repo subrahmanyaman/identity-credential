@@ -9,6 +9,7 @@ import co.nstant.in.cbor.builder.MapBuilder;
 import co.nstant.in.cbor.model.Array;
 import co.nstant.in.cbor.model.ByteString;
 import co.nstant.in.cbor.model.DataItem;
+import co.nstant.in.cbor.model.MajorType;
 import co.nstant.in.cbor.model.Map;
 import co.nstant.in.cbor.model.UnicodeString;
 import co.nstant.in.cbor.model.UnsignedInteger;
@@ -456,6 +457,7 @@ public class MDocCredential {
   //
   public void provision(MDocSigningKeyCertificationRequest request, Instant expirationDate,
       byte[] credentialData) {
+    CredentialDataParser.validateCredentialData(credentialData);
     ByteArrayOutputStream bao = new ByteArrayOutputStream();
     try {
       // BEGIN

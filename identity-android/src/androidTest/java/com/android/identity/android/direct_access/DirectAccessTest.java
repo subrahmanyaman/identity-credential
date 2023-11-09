@@ -31,8 +31,6 @@ public abstract class DirectAccessTest {
   protected DirectAccessTransport mTransport;
   protected MDocStore mDocStore;
   protected String mDocName;
-  //MDocStore mDocStore;
-  //String mDocName;
   protected StorageEngine mStorageEngine;
   Context mContext;
   private final OnConnectedListener mListener = new OnConnectedListener() {
@@ -126,7 +124,7 @@ public abstract class DirectAccessTest {
       int numSigningKeys = 1;
       mDocStore = new MDocStore(mTransport, mStorageEngine);
       MDocCredential credential = mDocStore.createCredential(mDocName,
-          DirectAccessTestUtils.MDL_DOCTYPE, challenge, numSigningKeys, Duration.ofDays(365));
+          CredentialDataParser.MDL_DOC_TYPE, challenge, numSigningKeys, Duration.ofDays(365));
       List<X509Certificate> certificates = credential.getCredentialKeyCertificateChain();
       Assert.assertTrue(certificates.size() >= 1);
       Assert.assertEquals(numSigningKeys, credential.getNumSigningKeys());
@@ -135,13 +133,35 @@ public abstract class DirectAccessTest {
       Assert.assertEquals(numSigningKeys, certificationRequests.size());
       // Provision
       byte[] encodedCredData = DirectAccessTestUtils.createCredentialData(mContext,
-          certificationRequests.get(0), DirectAccessTestUtils.MDL_DOCTYPE);
+          certificationRequests.get(0), CredentialDataParser.MDL_DOC_TYPE);
       credential.provision(certificationRequests.get(0), Instant.now(), encodedCredData);
-      // TODO Swap-in flow not tested.
+      // Set data
       credential.swapIn(certificationRequests.get(0));
     } catch (Exception e) {
       fail("Unexpected Exception " + e);
     }
   }
 
+
+  // public static void print(byte[] data) {
+  //   int NO_CHARS_IN_LINE = 1024;
+  //   int noCounts = data.length / NO_CHARS_IN_LINE;
+  //   int remaining = data.length % NO_CHARS_IN_LINE;
+  //   int i = 0;
+  //   for (; i < noCounts; i++) {
+  //     String str = tohexStr(data, (NO_CHARS_IN_LINE * i), NO_CHARS_IN_LINE);
+  //     Log.d("<======>[" + i + "]", str);
+  //   }
+  //   String str = tohexStr(data, (i * NO_CHARS_IN_LINE), remaining);
+  //   Log.d("<======>[" + i + "]", str);
+  // }
+  //
+  // public static String tohexStr(byte[] data, int off, int len) {
+  //   StringBuilder sb = new StringBuilder();
+  //   System.out.println("----");
+  //   for (int i = off; i < (off + len); i++) {
+  //     sb.append(String.format("%02X", data[i]));
+  //   }
+  //   return sb.toString();
+  // }
 }
