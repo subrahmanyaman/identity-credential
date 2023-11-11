@@ -235,8 +235,11 @@ public class MDocCredential {
         Util.cborEncode(builder.build().get(0)));
   }
 
-  private co.nstant.in.cbor.model.Map parseStoredData(String path) {
+  private co.nstant.in.cbor.model.Map parseStoredData(@NonNull String path) {
     byte[] data = mStorageEngine.get(path);
+    if (data == null) {
+      throw new IllegalStateException("No Data found for doc name: " + mDocName);
+    }
     ByteArrayInputStream bais = new ByteArrayInputStream(data);
     List<DataItem> dataItems;
     try {

@@ -1,11 +1,5 @@
 package com.android.identity.android.direct_access;
 
-import static org.junit.Assert.fail;
-
-import android.nfc.tech.IsoDep;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -16,8 +10,6 @@ import com.android.identity.mdoc.connectionmethod.ConnectionMethod;
 import com.android.identity.mdoc.response.DeviceResponseParser;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -27,15 +19,17 @@ import org.junit.runner.RunWith;
 @RunWith(AndroidJUnit4.class)
 //@RunWith(RobolectricTestRunner.class)
 public class DirectAccessPresentationTest extends DirectAccessTest {
+
   private static final String TAG = "DirectAccessPresentationTest";
-  private static final int DEVICE_ENGAGEMENT_RECEIVED = 1;
-  private static final int ERROR = 2;
-  private static final int DISCONNECTED = 3;
-  private static final int DEVICE_RESPONSE_RECEIVED = 4;
+
+  private static final int DEVICE_CONNECT_STATUS_DISCONNECTED = 0;
+
+  private static final int DEVICE_CONNECT_STATUS_CONNECTED = 1;
+  private int mDeviceConnectStatus;
+  private Throwable mError;
   private CountDownLatch mCountDownLatch;
   private VerificationHelper mVerificationHelper;
   private List<ConnectionMethod> mConnectionMethods;
-  private Throwable mError;
 
   private byte[] mDeviceResponse;
 
@@ -59,8 +53,7 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
           + "eb839a35f658401f3400069063c189138bdcd2f631427c589424113fc9ec26cebcacacfcdb9695d28"
           + "e99953becabc4e30ab4efacc839a81f9159933d192527ee91b449bb7f80bf";
 
-  public static
-  byte[] fromHex( String stringWithHex) {
+  public static byte[] fromHex(String stringWithHex) {
     int stringLength = stringWithHex.length();
     if ((stringLength % 2) != 0) {
       throw new IllegalArgumentException("Invalid length of hex string: " + stringLength);
@@ -73,19 +66,19 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
     }
     return data;
   }
+
   @Override
   @Before
   public void init() {
     super.init();
     mConnectionMethods = null;
+    mDeviceConnectStatus = DEVICE_CONNECT_STATUS_DISCONNECTED;
     mError = null;
-    mCountDownLatch = new CountDownLatch(1);
   }
 
   @Override
   @After
   public void reset() {
-    Log.d(TAG, "Calling reset!!!!!");
     super.reset();
   }
 
@@ -94,17 +87,15 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
     @Override
     public void onReaderEngagementReady(@NonNull byte[] readerEngagement) {
       Log.d(TAG, "onReaderEngagementReady");
-      Log.d(TAG, "Thread id:"+Thread.currentThread().getId());
+      Log.d(TAG, "Thread id:" + Thread.currentThread().getId());
     }
 
     @Override
     public void onDeviceEngagementReceived(@NonNull List<ConnectionMethod> connectionMethods) {
       Log.d(TAG, "onDeviceEngagementReceived");
-      Log.d(TAG, "Thread id:"+Thread.currentThread().getId());
+      Log.d(TAG, "Thread id:" + Thread.currentThread().getId());
       mConnectionMethods = ConnectionMethod.disambiguate(connectionMethods);
-      Message msg = Message.obtain();
-      msg.what = DEVICE_ENGAGEMENT_RECEIVED;
-      mHandler.sendMessage(msg);
+      mCountDownLatch.countDown();
     }
 
     @Override
@@ -115,34 +106,28 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
     @Override
     public void onDeviceConnected() {
       Log.d(TAG, "onDeviceConnected");
+      mDeviceConnectStatus = DEVICE_CONNECT_STATUS_CONNECTED;
     }
 
     @Override
     public void onDeviceDisconnected(boolean transportSpecificTermination) {
       Log.d(TAG, "onDeviceDisconnected");
-      Message msg = Message.obtain();
-      msg.what = DISCONNECTED;
-      mHandler.sendMessage(msg);
+      mDeviceConnectStatus = DEVICE_CONNECT_STATUS_DISCONNECTED;
+      mCountDownLatch.countDown();
     }
 
     @Override
     public void onResponseReceived(@NonNull byte[] deviceResponseBytes) {
       Log.d(TAG, "onResponseReceived");
       mDeviceResponse = deviceResponseBytes;
-      Message msg = Message.obtain();
-      msg.what = DEVICE_RESPONSE_RECEIVED;
-      mHandler.sendMessage(msg);
+      mCountDownLatch.countDown();
     }
 
     @Override
     public void onError(@NonNull Throwable error) {
       Log.d(TAG, "onError");
-      Log.d(TAG, "Thread id:"+Thread.currentThread().getId());
-      Message msg = Message.obtain();
-      msg.what = ERROR;
-      Bundle bundle = new Bundle();
-      bundle.putString("Error", error.getMessage());
-      mHandler.sendMessage(msg);
+      mError = error;
+      mCountDownLatch.countDown();
     }
   };
 
@@ -151,67 +136,60 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
     parser.setSessionTranscript(mVerificationHelper.getSessionTranscript());
     parser.setEphemeralReaderKey(mVerificationHelper.getEphemeralReaderKey());
     parser.setDeviceResponse(deviceResponse);
+    // TODO Validate the response against the request.
     return parser.parse();
   }
 
-  Handler mHandler;
-  final Handler.Callback cb = new Handler.Callback() {
-    public boolean handleMessage(Message msg) {
-      //Log.d(TAG, " handleMessage Thread Id: "+Thread.currentThread().getId());
-      switch (msg.what) {
-        case DEVICE_ENGAGEMENT_RECEIVED:
-          Assert.assertNotNull(mConnectionMethods);
-          Assert.assertTrue(mConnectionMethods.size() > 0);
-          mVerificationHelper.connect(mConnectionMethods.get(0));
-          byte[] devReq = fromHex(ISO_18013_5_ANNEX_D_DEVICE_REQUEST);
-          mVerificationHelper.sendRequest(devReq);
-          return true;
-        case ERROR:
-          Bundle bundle = msg.getData();
-          fail(bundle.getString("Error"));
-          mCountDownLatch.countDown();
-          return true;
-        case DEVICE_RESPONSE_RECEIVED:
-          // TODO Validate the response.
-          Assert.assertNotNull(mDeviceResponse);
-          DeviceResponseParser.DeviceResponse dr = parseDeviceResponse(mDeviceResponse);
-          Assert.assertNotNull(dr);
-          mVerificationHelper.disconnect();
-          return true;
-        case DISCONNECTED:
-          mCountDownLatch.countDown();
-          return true;
-      }
-      return false;
+  private void resetLatch() {
+    mCountDownLatch = new CountDownLatch(1);
+  }
+
+  private void waitForResponse(int expectedDeviceConnectionStatus) {
+    try {
+      mCountDownLatch.await();
+    } catch (InterruptedException e) {
+      // do nothing
     }
-  };
+    checkSessionStatus(expectedDeviceConnectionStatus);
+  }
+
+  private void checkSessionStatus(int expectedDeviceStatus) {
+    Assert.assertEquals("Device connection status ", expectedDeviceStatus, mDeviceConnectStatus);
+    if (mError != null) {
+      Assert.fail(mError.getMessage());
+    }
+  }
 
   @Test
   public void testPresentation() {
-    try {
-      //Log.d(TAG, " testPresentation Thread Id: "+Thread.currentThread().getId());
-      provisionAndSwapIn();
-      Executor executor = Executors.newSingleThreadExecutor();
-      mHandler = new Handler(mContext.getMainLooper(), cb);
-      VerificationHelper.Builder builder = new VerificationHelper.Builder(mContext,
-          mResponseListener,
-          executor);
-      DataTransportOptions options = new DataTransportOptions.Builder().setBleClearCache(false)
-          .setBleClearCache(false).build();
-      builder.setDataTransportOptions(options);
-      mVerificationHelper = builder.build();
+    provisionAndSwapIn();
+    VerificationHelper.Builder builder = new VerificationHelper.Builder(mContext, mResponseListener,
+        mContext.getMainExecutor());
+    DataTransportOptions options = new DataTransportOptions.Builder().setBleClearCache(false)
+        .setBleClearCache(false).build();
+    builder.setDataTransportOptions(options);
+    mVerificationHelper = builder.build();
 
-      IsoDepWrapper wrapper = new ShadowIsoDep(mTransport);
-      mVerificationHelper.mockTagDiscovered(wrapper);
-      try {
-        mCountDownLatch.await();
-      } catch (InterruptedException e) {
-        fail(e.getMessage());
-      }
-    } finally {
-      reset();
-    }
-
+    IsoDepWrapper wrapper = new ShadowIsoDep(mTransport);
+    resetLatch();
+    mVerificationHelper.mockTagDiscovered(wrapper);
+    // Wait till the device engagement is received.
+    waitForResponse(DEVICE_CONNECT_STATUS_DISCONNECTED);
+    Assert.assertNotNull(mConnectionMethods);
+    Assert.assertTrue(mConnectionMethods.size() > 0);
+    mVerificationHelper.connect(mConnectionMethods.get(0));
+    byte[] devReq = fromHex(ISO_18013_5_ANNEX_D_DEVICE_REQUEST);
+    resetLatch();
+    mVerificationHelper.sendRequest(devReq);
+    // Wait till the mdoc response is received.
+    waitForResponse(DEVICE_CONNECT_STATUS_CONNECTED);
+    Assert.assertNotNull(mDeviceResponse);
+    DeviceResponseParser.DeviceResponse dr = parseDeviceResponse(mDeviceResponse);
+    Assert.assertNotNull(dr);
+    resetLatch();
+    mVerificationHelper.disconnect();
+    // Wait till the session gets disconnected.
+    waitForResponse(DEVICE_CONNECT_STATUS_DISCONNECTED);
   }
 
 
