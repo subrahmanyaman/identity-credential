@@ -11,7 +11,7 @@ public class DirectAccessSocketTransport implements DirectAccessTransport {
 
   private static final int PORT = 8080;
   private static final String IPADDR = "192.168.9.112";
-  private static final int MAX_RECV_BUFFER_SIZE = 2500;
+  private static final int MAX_RECV_BUFFER_SIZE = 700;
   private Socket mSocket;
   private boolean socketStatus;
 

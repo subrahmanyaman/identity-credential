@@ -5,15 +5,23 @@ import static org.junit.Assert.fail;
 import android.content.Context;
 import android.se.omapi.SEService;
 import android.se.omapi.SEService.OnConnectedListener;
+import android.util.Log;
 import androidx.test.platform.app.InstrumentationRegistry;
 import com.android.identity.android.storage.AndroidStorageEngine;
 import com.android.identity.storage.StorageEngine;
+import com.android.identity.util.Logger;
 import java.io.File;
 import java.io.IOException;
+import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.Executor;
@@ -32,7 +40,11 @@ public abstract class DirectAccessTest {
   protected MDocStore mDocStore;
   protected String mDocName;
   protected StorageEngine mStorageEngine;
-  Context mContext;
+  protected Context mContext;
+
+  protected ArrayList<KeyPair> mReaderKeys;
+  protected HashMap<KeyPair, ArrayList<X509Certificate>> mReaderCertChain;
+
   private final OnConnectedListener mListener = new OnConnectedListener() {
     public void onConnected() {
       synchronized (serviceMutex) {
@@ -132,8 +144,21 @@ public abstract class DirectAccessTest {
           Duration.ofDays(180));
       Assert.assertEquals(numSigningKeys, certificationRequests.size());
       // Provision
+      ArrayList<X509Certificate> cert = null;
+      if (mReaderCertChain != null) {
+        cert = new ArrayList<>();
+        for(Map.Entry<KeyPair, ArrayList<X509Certificate>> entry : mReaderCertChain.entrySet()) {
+          KeyPair key = entry.getKey();
+          ArrayList<X509Certificate> certChain = entry.getValue();
+          if (certChain != null && certChain.size() > 0) {
+            cert.add(certChain.get(0)); // Add leaf public key
+          }
+        }
+      }
       byte[] encodedCredData = DirectAccessTestUtils.createCredentialData(mContext,
-          certificationRequests.get(0), CredentialDataParser.MDL_DOC_TYPE);
+          certificationRequests.get(0), CredentialDataParser.MDL_DOC_TYPE, cert);
+      Logger.dCbor("DirectAccessTest", "encodedCredData Hardcoded", encodedCredData);
+      print(encodedCredData);
       credential.provision(certificationRequests.get(0), Instant.now(), encodedCredData);
       // Set data
       credential.swapIn(certificationRequests.get(0));

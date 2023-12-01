@@ -34,9 +34,11 @@ import java.util.List;
 public class MDocCredential {
 
   private static final String TAG = "MDocCredential";
-  private static final byte[] DIRECT_ACCESS_PROVISIONING_APPLET_ID = {
-      (byte)0xA0, 0x00, 0x00, 0x04, 0x76, 0x57, 0x56, 0x52, 0x43, 0x4F, 0x52, 0x45,0x30,
-      0x00, 0x01, 0x01};
+  // private static final byte[] DIRECT_ACCESS_PROVISIONING_APPLET_ID = {
+  //     (byte)0xA0, 0x00, 0x00, 0x04, 0x76, 0x57, 0x56, 0x52, 0x43, 0x4F, 0x52, 0x45,0x30,
+  //     0x00, 0x01, 0x01};
+  public static final byte[] DIRECT_ACCESS_PROVISIONING_APPLET_ID = {
+      (byte) 0xA0, 0x00, 0x00, 0x02, 0x48, 0x00, 0x01, 0x01, 0x01};
   private static final String MDOC_CREDENTIAL_PREFIX = "DA_Credential_";
   private static final String MDOC_PREFIX = "DA_AndroidKeystore_";
   private static final long CREDENTIAL_KEY_VALID_DURATION = (365 * 24 * 60 * 60 * 1000);
@@ -414,7 +416,7 @@ public class MDocCredential {
   }
 
   private byte[] sendApdu(int cmd, int slot, byte[] data, int offset, int length, byte operation) throws IOException {
-    selectProvisionApplet();
+    //selectProvisionApplet();
     byte[] beginApdu = mApduHelper.createProvisionSwapInApdu(cmd, slot,
         data, offset, length, operation);
     byte[] response = mTransport.sendData(beginApdu);
@@ -460,6 +462,7 @@ public class MDocCredential {
   //
   public void provision(MDocSigningKeyCertificationRequest request, Instant expirationDate,
       byte[] credentialData) {
+    selectProvisionApplet();
     CredentialDataParser.validateCredentialData(credentialData);
     ByteArrayOutputStream bao = new ByteArrayOutputStream();
     try {
@@ -491,6 +494,7 @@ public class MDocCredential {
 
   public void swapIn(MDocSigningKeyCertificationRequest request) {
     try {
+      selectProvisionApplet();
       byte[] encryptedData = getEncryptedDataPresentationPackage(request);
       int remaining = encryptedData.length;
       int start = 0;

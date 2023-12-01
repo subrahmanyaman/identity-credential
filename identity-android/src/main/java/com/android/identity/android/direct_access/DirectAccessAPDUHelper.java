@@ -37,11 +37,11 @@ public class DirectAccessAPDUHelper {
     return bb.array();
   }
 
-  private byte[] makeCommandApdu(byte[] data) throws IOException {
+  private byte[] makeCommandApdu(byte ins, byte[] data) throws IOException {
     // TODO Handle non extended length.
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     bos.write(0); // CLS
-    bos.write(INS_ENVELOPE); // INS
+    bos.write(ins); // INS
     bos.write(0); // P1
     bos.write(0); // P2
     // Send extended length APDU always as response size is not known to HAL.
@@ -59,6 +59,10 @@ public class DirectAccessAPDUHelper {
     bos.write(0);
     bos.write(0);
     return bos.toByteArray();
+  }
+
+  private byte[] makeCommandApdu(byte[] data) throws IOException {
+    return makeCommandApdu(INS_ENVELOPE, data);
   }
 
   public int getAPDUResponseStatus(@NonNull byte[] input) {
@@ -211,6 +215,35 @@ public class DirectAccessAPDUHelper {
     return makeCommandApdu(bos.toByteArray());
   }
 
+
+  // Used for only testing purpose.
+  public byte[] createFactoryProvisionApdu(byte ins, short tagCert, byte[] certData,
+      short tagKey, byte[] keyData) throws IOException {
+    byte[] scratchpad = new byte[2];
+
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    // set Tag cert
+    setShort(scratchpad, 0, tagCert);
+    bos.write(scratchpad);
+
+    // set cert length
+    setShort(scratchpad, 0, (short) certData.length);
+
+    // set cert data
+    bos.write(certData);
+
+    // set tag key
+    setShort(scratchpad, 0, tagKey);
+    bos.write(scratchpad);
+
+    // set key length
+    setShort(scratchpad, 0, (short) keyData.length);
+
+    // set cert data
+    bos.write(keyData);
+
+    return makeCommandApdu(ins, bos.toByteArray());
+  }
 
   public static void print(byte[] buf, short start, short length) {
     StringBuilder sb = new StringBuilder();

@@ -11,30 +11,79 @@ import com.android.identity.android.legacy.AccessControlProfile;
 import com.android.identity.android.legacy.AccessControlProfileId;
 import com.android.identity.android.legacy.PersonalizationData;
 import com.android.identity.internal.Util;
+import com.android.identity.mdoc.request.DeviceRequestGenerator;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.math.BigInteger;
+import java.security.InvalidKeyException;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.SecureRandom;
+import java.security.Signature;
+import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.interfaces.ECPublicKey;
 import java.security.spec.ECGenParameterSpec;
+import java.security.spec.EncodedKeySpec;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Map;
+import javax.security.auth.x500.X500Principal;
 import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
+import org.bouncycastle.cert.X509CertificateHolder;
+import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 public class DirectAccessTestUtils {
 
-  private static KeyPair generateIssuingAuthorityKeyPair() throws Exception {
+  private static PrivateKey getReaderCAPrivateKey()
+      throws NoSuchAlgorithmException, InvalidKeySpecException {
+    // TODO: should get private key from KeysAndCertificates class instead of
+    //  hard-coding it here.
+    byte[] keyBytes = Base64.getDecoder()
+        .decode(
+            "ME4CAQAwEAYHKoZIzj0CAQYFK4EEACIENzA1AgEBBDCI6BG/yRDzi307Rqq2Ndw5mYi2y4MR+n6IDqjl2Qw/Sdy8D5eCzp8mlcL/vCWnEq0=");
+    EncodedKeySpec spec = new PKCS8EncodedKeySpec(keyBytes);
+    KeyFactory kf = KeyFactory.getInstance("EC");
+    return kf.generatePrivate(spec);
+  }
+
+  private static X509Certificate getGoogleRootCa(Context context) throws CertificateException {
+    InputStream certInputStream =
+        context.getResources().openRawResource(com.android.identity.test.R.raw.google_reader_ca);
+    CertificateFactory cf = CertificateFactory.getInstance("X.509");
+    return (X509Certificate) cf.generateCertificate(certInputStream);
+  }
+
+  private static KeyPair generateEcdsaKeyPair() throws Exception {
     KeyPairGenerator kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC);
     ECGenParameterSpec ecSpec = new ECGenParameterSpec("prime256v1");
     kpg.initialize(ecSpec);
     return kpg.generateKeyPair();
+  }
+
+  public static KeyPair generateReaderKeyPair() throws Exception {
+    return generateEcdsaKeyPair();
+  }
+
+  private static KeyPair generateIssuingAuthorityKeyPair() throws Exception {
+    return generateEcdsaKeyPair();
   }
 
   private static X509Certificate getSelfSignedIssuerAuthorityCertificate(
@@ -179,7 +228,7 @@ public class DirectAccessTestUtils {
 
   public static byte[] createCredentialData(Context context,
       MDocCredential.MDocSigningKeyCertificationRequest authKeyCert,
-      String docType) {
+      String docType, ArrayList<X509Certificate> readerPublicKeys) {
     try {
       KeyPair issuerKeypair = generateIssuingAuthorityKeyPair();
       return CredentialDataParser.generateCredentialData(
@@ -187,10 +236,78 @@ public class DirectAccessTestUtils {
           getPersonalizationData(context, false),
           authKeyCert.getCertificate().getPublicKey(),
           issuerKeypair,
-          getSelfSignedIssuerAuthorityCertificate(issuerKeypair));
+          getSelfSignedIssuerAuthorityCertificate(issuerKeypair),
+          readerPublicKeys);
     } catch (Exception e) {
       throw new IllegalStateException("Failed to create CredentialData error: " + e.getMessage());
     }
   }
+
+  public static byte[] createMdocRequest(KeyPair readerKey,
+      ArrayList<X509Certificate> readerKeyCertChain,
+      byte[] sessionTranscript) throws NoSuchAlgorithmException, InvalidKeyException {
+    Map<String, Map<String, Boolean>> mdlNamespace = new HashMap<>();
+    Map<String, Boolean> entries = new HashMap<>();
+    entries.put("sex", false);
+    entries.put("portrait", false);
+    entries.put("given_name", false);
+    entries.put("issue_date", false);
+    entries.put("expiry_date", false);
+    entries.put("family_name", false);
+    entries.put("document_number", false);
+    entries.put("issuing_authority", false);
+    mdlNamespace.put(CredentialDataParser.MDL_NAMESPACE, entries);
+    Signature signature = null;
+    if (readerKey != null) {
+      signature = Signature.getInstance("SHA256withECDSA", new BouncyCastleProvider());
+      signature.initSign(readerKey.getPrivate());
+    }
+
+    DeviceRequestGenerator generator = new DeviceRequestGenerator();
+    generator.setSessionTranscript(sessionTranscript);
+    generator.addDocumentRequest(CredentialDataParser.MDL_DOC_TYPE,
+        mdlNamespace, null, signature, readerKeyCertChain);
+    return generator.generate();
+  }
+
+  public static ArrayList<X509Certificate> getReaderCertificateChain(Context context,
+      KeyPair readerKey, boolean isSelfSigned) throws Exception {
+    ArrayList<X509Certificate> certChain = null;
+    // TODO support for signing with Google root CA.
+    X500Principal issuer = new X500Principal("CN=SelfSigned, O=Android, C=US");
+    X500Principal subject = new X500Principal("CN=Subject, O=Android, C=US");
+    // Make the certificate valid for two days.
+    long millisPerDay = 24 * 60 * 60 * 1000;
+    long now = System.currentTimeMillis();
+    Date start = new Date(now - millisPerDay);
+    Date end = new Date(now + millisPerDay);
+
+    byte[] serialBytes = new byte[16];
+    new SecureRandom().nextBytes(serialBytes);
+    BigInteger serialNumber = new BigInteger(1, serialBytes);
+
+    X509v3CertificateBuilder x509cg =
+        new X509v3CertificateBuilder(
+            X500Name.getInstance(issuer.getEncoded()),
+            serialNumber,
+            start,
+            end,
+            X500Name.getInstance(subject.getEncoded()),
+            SubjectPublicKeyInfo.getInstance(readerKey.getPublic().getEncoded())
+        );
+    X509CertificateHolder x509holder =
+        x509cg.build(
+            new JcaContentSignerBuilder("SHA256withECDSA")
+                .build(readerKey.getPrivate()));
+    CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+    X509Certificate x509c =
+        (X509Certificate)
+            certFactory.generateCertificate(
+                new ByteArrayInputStream(x509holder.getEncoded()));
+    certChain = new ArrayList<>();
+    certChain.add(x509c);
+    return certChain;
+  }
+
 
 }

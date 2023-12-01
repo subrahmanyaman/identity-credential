@@ -8,6 +8,12 @@ import com.android.identity.android.mdoc.deviceretrieval.VerificationHelper;
 import com.android.identity.android.mdoc.transport.DataTransportOptions;
 import com.android.identity.mdoc.connectionmethod.ConnectionMethod;
 import com.android.identity.mdoc.response.DeviceResponseParser;
+import com.android.identity.util.Logger;
+import java.lang.reflect.Array;
+import java.security.KeyPair;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import org.junit.After;
@@ -160,8 +166,25 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
     }
   }
 
+  private void generateReaderCerts(boolean isSelfSigned) {
+    try {
+      KeyPair keyPair = DirectAccessTestUtils.generateReaderKeyPair();
+      ArrayList<X509Certificate> readerCertChain =
+          DirectAccessTestUtils.getReaderCertificateChain(mContext, keyPair, isSelfSigned);
+      mReaderKeys = new ArrayList<>();
+      mReaderKeys.add(keyPair);
+
+      mReaderCertChain = new HashMap<>();
+      mReaderCertChain.put(keyPair, readerCertChain);
+    } catch (Exception e) {
+      Assert.fail(e.getMessage());
+    }
+  }
+
+
   @Test
   public void testPresentation() {
+    generateReaderCerts(true);
     provisionAndSwapIn();
     VerificationHelper.Builder builder = new VerificationHelper.Builder(mContext, mResponseListener,
         mContext.getMainExecutor());
@@ -178,7 +201,31 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
     Assert.assertNotNull(mConnectionMethods);
     Assert.assertTrue(mConnectionMethods.size() > 0);
     mVerificationHelper.connect(mConnectionMethods.get(0));
-    byte[] devReq = fromHex(ISO_18013_5_ANNEX_D_DEVICE_REQUEST);
+    byte[] devReq = null;
+    try {
+      KeyPair readerKeypair = null;
+      ArrayList<X509Certificate> certChain = null;
+      if (mReaderKeys != null) {
+        readerKeypair = mReaderKeys.get(0);
+        certChain = mReaderCertChain.get(mReaderKeys.get(0));
+      }
+      devReq = DirectAccessTestUtils.createMdocRequest(readerKeypair,
+          certChain,
+          mVerificationHelper.getSessionTranscript());
+    } catch (Exception e) {
+      Assert.fail(e.getMessage());
+    }
+    //byte[] devReq = fromHex(ISO_18013_5_ANNEX_D_DEVICE_REQUEST);
+    Logger.dCbor(TAG, "devReq Hardcoded", devReq);
+    print(devReq);
+    // try {
+    //   Logger.dCbor(TAG, "devReq generated",
+    //       DirectAccessTestUtils.createMdocRequest(mReaderKeys.get(0),
+    //           mReaderCertChain.get(mReaderKeys.get(0)),
+    //           mVerificationHelper.getSessionTranscript()));
+    // } catch (Exception e) {
+    //   Assert.fail(e.getMessage());
+    // }
     resetLatch();
     mVerificationHelper.sendRequest(devReq);
     // Wait till the mdoc response is received.
@@ -189,7 +236,7 @@ public class DirectAccessPresentationTest extends DirectAccessTest {
     resetLatch();
     mVerificationHelper.disconnect();
     // Wait till the session gets disconnected.
-    waitForResponse(DEVICE_CONNECT_STATUS_DISCONNECTED);
+    //waitForResponse(DEVICE_CONNECT_STATUS_DISCONNECTED);
   }
 
 

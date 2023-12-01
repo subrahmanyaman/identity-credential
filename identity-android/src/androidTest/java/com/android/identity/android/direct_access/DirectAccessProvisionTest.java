@@ -60,7 +60,7 @@ public class DirectAccessProvisionTest extends DirectAccessTest {
       Assert.assertEquals(numSigningKeys, certificationRequests.size());
       // Provision
       byte[] encodedCredData = DirectAccessTestUtils.createCredentialData(mContext,
-          certificationRequests.get(0), CredentialDataParser.MDL_DOC_TYPE);
+          certificationRequests.get(0), CredentialDataParser.MDL_DOC_TYPE, null);
       credential.provision(certificationRequests.get(0), Instant.now(), encodedCredData);
     } catch (Exception e) {
       fail("Unexpected Exception " + e);

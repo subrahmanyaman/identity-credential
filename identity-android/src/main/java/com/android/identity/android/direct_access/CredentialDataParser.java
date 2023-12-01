@@ -14,12 +14,15 @@ import com.android.identity.mdoc.mso.MobileSecurityObjectGenerator;
 import com.android.identity.mdoc.mso.MobileSecurityObjectParser;
 import com.android.identity.util.Logger;
 import com.android.identity.util.Timestamp;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.security.KeyPair;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.security.interfaces.ECPublicKey;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -46,7 +49,7 @@ public class CredentialDataParser {
 
   public static byte[] generateCredentialData(String docType, PersonalizationData personalizationData,
       PublicKey authKey, KeyPair issuerAuthorityKeyPair,
-      X509Certificate issuerAuthorityCertificate) {
+      X509Certificate issuerAuthorityCertificate, ArrayList<X509Certificate> readerCerts) {
     HashMap<String, List<byte[]>> issuerSignedMapping = generateIssuerNamespaces(
         personalizationData);
     byte[] encodedIssuerAuth = createMobileSecurityObject(docType, authKey, personalizationData,
@@ -62,11 +65,20 @@ public class CredentialDataParser {
       }
     }
     DataItem issuerNamespacesItem = issuerNamespacesBuilder.build().get(0);
+    // reader keys
+    ArrayBuilder<CborBuilder> readerBuilder = new CborBuilder().addArray();
+    if (readerCerts != null) {
+      for (X509Certificate cert : readerCerts) {
+        byte[] pubKey = getAndFormatRawPublicKey(cert);
+        readerBuilder.add(pubKey);
+      }
+    }
+    DataItem readerAuth = readerBuilder.end().build().get(0);
     return Util.cborEncode(
         new CborBuilder().addMap().put(new UnicodeString("docType"), new UnicodeString(docType))
             .put(new UnicodeString("issuerNameSpaces"), issuerNamespacesItem)
             .put(new UnicodeString("issuerAuth"), Util.cborDecode(encodedIssuerAuth))
-            .put(new UnicodeString("readerAccess"), new Array()) // TODO Empty reader access.
+            .put(new UnicodeString("readerAccess"), readerAuth)
             .end().build().get(0));
   }
 
@@ -290,6 +302,39 @@ public class CredentialDataParser {
             null, issuerAuthorityCertChain));
 
     return encodedIssuerAuth;
+  }
+
+
+  public static byte[] getAndFormatRawPublicKey(X509Certificate cert) {
+    PublicKey pubKey = cert.getPublicKey();
+    if (!(pubKey instanceof ECPublicKey)) {
+      return null;
+    }
+    ECPublicKey key = (ECPublicKey) cert.getPublicKey();
+    // s: 1 byte, x: 32 bytes, y: 32 bytes
+    BigInteger xCoord = key.getW().getAffineX();
+    BigInteger yCoord = key.getW().getAffineY();
+    byte[] formattedKey = new byte[65];
+    int offset = 0;
+    formattedKey[offset++] = 0x04;
+    byte[] xBytes = xCoord.toByteArray();
+    // BigInteger returns the value as two's complement big endian byte encoding. This means
+    // that a positive, 32-byte value with a leading 1 bit will be converted to a byte array of
+    // length 33 in order to include a leading 0 bit.
+    if (xBytes.length == 33) {
+      System.arraycopy(xBytes, 1 /* offset */, formattedKey, offset, 32);
+    } else {
+      System.arraycopy(xBytes, 0 /* offset */,
+          formattedKey, offset + 32 - xBytes.length, xBytes.length);
+    }
+    byte[] yBytes = yCoord.toByteArray();
+    if (yBytes.length == 33) {
+      System.arraycopy(yBytes, 1 /* offset */, formattedKey, offset + 32 /* offset */, 32);
+    } else {
+      System.arraycopy(yBytes, 0 /* offset */,
+          formattedKey, offset + 64 - yBytes.length, yBytes.length);
+    }
+    return formattedKey;
   }
 
 }
