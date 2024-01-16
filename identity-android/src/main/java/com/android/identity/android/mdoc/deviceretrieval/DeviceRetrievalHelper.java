@@ -38,6 +38,7 @@ import com.android.identity.internal.Util;
 
 import java.security.KeyPair;
 import java.security.PublicKey;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.OptionalLong;
@@ -98,8 +99,12 @@ public class DeviceRetrievalHelper {
         Logger.d(TAG, "reportEReaderKeyReceived: " + eReaderKey);
         final Listener listener = mListener;
         final Executor executor = mListenerExecutor;
-        if (!mInhibitCallbacks && listener != null && executor != null) {
-            executor.execute(() -> listener.onEReaderKeyReceived(eReaderKey));
+        if (listener != null && executor != null) {
+            executor.execute(() -> {
+                if (!mInhibitCallbacks) {
+                    listener.onEReaderKeyReceived(eReaderKey);
+                }
+            });
         }
     }
 
@@ -107,8 +112,12 @@ public class DeviceRetrievalHelper {
         Logger.d(TAG, "reportDeviceRequest: deviceRequestBytes: " + deviceRequestBytes.length + " bytes");
         final Listener listener = mListener;
         final Executor executor = mListenerExecutor;
-        if (!mInhibitCallbacks && listener != null && executor != null) {
-            executor.execute(() -> listener.onDeviceRequest(deviceRequestBytes));
+        if (listener != null && executor != null) {
+            executor.execute(() -> {
+                if (!mInhibitCallbacks) {
+                    listener.onDeviceRequest(deviceRequestBytes);
+                }
+            });
         }
     }
 
@@ -117,9 +126,12 @@ public class DeviceRetrievalHelper {
                 + transportSpecificTermination);
         final Listener listener = mListener;
         final Executor executor = mListenerExecutor;
-        if (!mInhibitCallbacks && listener != null && executor != null) {
-            executor.execute(() -> listener.onDeviceDisconnected(
-                    transportSpecificTermination));
+        if (listener != null && executor != null) {
+            executor.execute(() -> {
+                if (!mInhibitCallbacks) {
+                    listener.onDeviceDisconnected(transportSpecificTermination);
+                }
+            });
         }
     }
 
@@ -127,8 +139,12 @@ public class DeviceRetrievalHelper {
         Logger.d(TAG, "reportError: error: ", error);
         final Listener listener = mListener;
         final Executor executor = mListenerExecutor;
-        if (!mInhibitCallbacks && listener != null && executor != null) {
-            executor.execute(() -> listener.onError(error));
+        if (listener != null && executor != null) {
+            executor.execute(() -> {
+                if (!mInhibitCallbacks) {
+                    listener.onError(error);
+                }
+            });
         }
     }
 
@@ -267,19 +283,6 @@ public class DeviceRetrievalHelper {
             }
         }
         DataItem eReaderKeyDataItem = Util.cborDecode(encodedEReaderKey);
-        @SecureArea.EcCurve int curve;
-        try {
-            curve = Util.coseKeyGetCurve(eReaderKeyDataItem);
-        } catch (IllegalArgumentException e) {
-            Logger.w(TAG, "No curve identifier in COSE_Key", e);
-            return OptionalLong.of(Constants.SESSION_DATA_STATUS_ERROR_SESSION_ENCRYPTION);
-        }
-        if (curve != SecureArea.EC_CURVE_P256) {
-            Logger.w(TAG,
-                    String.format(Locale.US, "Expected curve P-256 (%d) but got %d",
-                            SecureArea.EC_CURVE_P256, curve));
-            return OptionalLong.of(Constants.SESSION_DATA_STATUS_ERROR_SESSION_ENCRYPTION);
-        }
         try {
             mEReaderKey = Util.coseKeyDecode(eReaderKeyDataItem);
         } catch (IllegalArgumentException

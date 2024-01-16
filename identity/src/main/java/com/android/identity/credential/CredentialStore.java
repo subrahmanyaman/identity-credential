@@ -24,20 +24,26 @@ import com.android.identity.securearea.SecureAreaRepository;
 import com.android.identity.storage.StorageEngine;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 
 /**
- * Class for holding real-world identity credentials.
+ * Class for storing real-world identity credentials.
  *
  * <p>This class is designed for storing real-world identity credentials such as
  * Mobile Driving Licenses (mDL) as specified in ISO/IEC 18013-5:2021. It is however
- * not tied to that specific credential shape and is designed to hold any kind of
- * credential, regardless of shape, presentation-, or issuance-protocol used.
+ * not tied to that specific credential format and is designed to hold any kind of
+ * credential, regardless of format, presentation-, or issuance-protocol used.
  *
  * <p>This code relies on a Secure Area for keys and this dependency is abstracted
- * by the {@link SecureArea} interface and allows the use of different implementations
- * on a per-credential basis. Persistent storage of credentials is abstracted via
- * the {@link StorageEngine} interface which provides a simple key/value store.
+ * by the {@link SecureArea} interface and allows the use of different {@link SecureArea}
+ * implementations for <em>Authentication Keys</em>) associated with credentials stored
+ * in the Credential Store.
+ *
+ * <p>It is guaranteed that once a credential is created with {@link #createCredential(String)},
+ * each subsequent call to {@link #lookupCredential(String)} will return the same
+ * {@link Credential} instance.
  *
  * <p>For more details about credentials stored in a {@link CredentialStore} see the
  * {@link Credential} class.
@@ -45,6 +51,9 @@ import java.util.List;
 public class CredentialStore {
     private final StorageEngine mStorageEngine;
     private final SecureAreaRepository mSecureAreaRepository;
+
+    // Use a cache so the same instance is returned by multiple lookupCredential() calls.
+    private final HashMap<String, Credential> mCredentialCache = new LinkedHashMap<>();
 
     /**
      * Creates a new credential store.
@@ -66,15 +75,14 @@ public class CredentialStore {
      * newly created credential.
      *
      * @param name name of the credential.
-     * @param credentialKeySettings the settings to use for CredentialKey.
      * @return A newly created credential.
      */
-    public @NonNull Credential createCredential(@NonNull String name,
-                                                @NonNull SecureArea.CreateKeySettings credentialKeySettings) {
-        return Credential.create(mStorageEngine,
+    public @NonNull Credential createCredential(@NonNull String name) {
+        Credential result = Credential.create(mStorageEngine,
                 mSecureAreaRepository,
-                name,
-                credentialKeySettings);
+                name);
+        mCredentialCache.put(name, result);
+        return result;
     }
 
     /**
@@ -84,7 +92,13 @@ public class CredentialStore {
      * @return the credential or {@code null} if not found.
      */
     public @Nullable Credential lookupCredential(@NonNull String name) {
-        return Credential.lookup(mStorageEngine, mSecureAreaRepository, name);
+        Credential result = mCredentialCache.get(name);
+        if (result != null) {
+            return result;
+        }
+        result = Credential.lookup(mStorageEngine, mSecureAreaRepository, name);
+        mCredentialCache.put(name, result);
+        return result;
     }
 
     /**
@@ -114,6 +128,7 @@ public class CredentialStore {
         if (credential == null) {
             return;
         }
+        mCredentialCache.remove(name);
         credential.deleteCredential();
     }
 }

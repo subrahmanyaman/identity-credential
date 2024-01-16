@@ -19,6 +19,7 @@ package com.android.identity.securearea;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -135,6 +136,23 @@ public interface SecureArea {
     @interface KeyPurpose {}
 
     /**
+     * Gets a stable identifier for the Secure Area.
+     *
+     * <p>This is typically just the class name but for secure areas allowing
+     * multiple instances, this could differ.
+     *
+     * @return a stable identifier for the Secure Area.
+     */
+    @NonNull String getIdentifier();
+
+    /**
+     * Gets a string suitable to display to the end user, for identifying the Secure Area instance.
+     *
+     * @return the display name for the Secure Area.
+     */
+    @NonNull String getDisplayName();
+
+    /**
      * Creates an new key.
      *
      * <p>This creates an EC key-pair where the private part of the key never
@@ -227,7 +245,7 @@ public interface SecureArea {
     /**
      * Class with information about a key.
      *
-     * <p>Concrete {@link SecureArea} implementations may subclass this to provide
+     * <p>Concrete {@link SecureArea} implementations may subclass this to provide additional
      * implementation-specific information about the key.
      */
     class KeyInfo {
@@ -247,7 +265,7 @@ public interface SecureArea {
         }
 
         /**
-         * Gets the attestation for a key.
+         * Gets the attestation for the key.
          *
          * @return A list of certificates representing a certificate chain.
          */
@@ -330,26 +348,32 @@ public interface SecureArea {
     }
 
     /**
-     *  Abstract type used to indicate key creation settings (authentication
-     *  required, nonce/challenge for remote attestation, etc.) and which
-     *  {@link SecureArea} to use.
+     * Base class for key creation settings.
+     *
+     * <p>This can be used for any conforming {@link SecureArea} implementations.
+     * although such implementations will typically supply their own implementations
+     * with additional settings to e.g. configure user authentication, passphrase
+     * protections, and other things.
      */
-    abstract class CreateKeySettings {
+    class CreateKeySettings {
+        protected final byte[] mAttestationChallenge;
 
-        private final Class<?> mSecureAreaClass;
-
-        protected CreateKeySettings(@NonNull Class<?> secureAreaClass) {
-            mSecureAreaClass = secureAreaClass;
+        /**
+         * Creates a new settings object.
+         *
+         * @param attestationChallenge challenge to include in attestation for the created key.
+         */
+        public CreateKeySettings(@NonNull byte[] attestationChallenge) {
+            mAttestationChallenge = attestationChallenge;
         }
 
         /**
-         * Returns the class of the {@link SecureArea} these settings are for.
+         * Gets the attestation challenge.
          *
-         * @return A {@link SecureArea}-derived type.
+         * @return the attestation challenge.
          */
-        public @NonNull
-        Class<?> getSecureAreaClass() {
-            return mSecureAreaClass;
+        public @NonNull byte[] getAttestationChallenge() {
+            return mAttestationChallenge;
         }
     }
 }

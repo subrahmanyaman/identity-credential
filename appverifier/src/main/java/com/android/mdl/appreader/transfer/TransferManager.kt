@@ -16,6 +16,7 @@ import com.android.identity.mdoc.request.DeviceRequestGenerator
 import com.android.identity.mdoc.response.DeviceResponseParser
 import com.android.identity.android.mdoc.deviceretrieval.VerificationHelper
 import androidx.preference.PreferenceManager
+import com.android.identity.internal.Util
 import com.android.mdl.appreader.R
 import com.android.mdl.appreader.document.RequestDocumentList
 import com.android.mdl.appreader.readercertgen.ReaderCertificateGenerator
@@ -315,7 +316,7 @@ class TransferManager private constructor(private val context: Context) {
             requestDocumentList.getAll().forEach { requestDocument ->
                 generator.addDocumentRequest(
                     requestDocument.docType,
-                    requestDocument.getItemsToRequest(),
+                    requestDocument.itemsToRequest,
                     null,
                     signature,
                     readerKeyCertificateChain
@@ -351,10 +352,37 @@ class TransferManager private constructor(private val context: Context) {
                 val parser =
                     DeviceResponseParser()
                 parser.setSessionTranscript(v.sessionTranscript)
-                parser.setEphemeralReaderKey(v.ephemeralReaderKey)
+                parser.setEphemeralReaderKey(v.eReaderKeyPair.private)
                 parser.setDeviceResponse(rb)
                 return parser.parse()
             } ?: throw IllegalStateException("Verification is null")
         } ?: throw IllegalStateException("Response not received")
     }
+
+    fun getMdocSessionEncryptionCurve(): Int {
+        return Util.getCurve(verification!!.eReaderKeyPair.public)
+    }
+
+    fun getTapToEngagementDurationMillis(): Long {
+        return verification?.tapToEngagementDurationMillis ?: 0
+    }
+
+    fun getEngagementToRequestDurationMillis(): Long {
+        return verification?.engagementToRequestDurationMillis ?: 0
+    }
+
+    fun getRequestToResponseDurationMillis(): Long {
+        return verification?.requestToResponseDurationMillis ?: 0
+    }
+
+    fun getEngagementMethod(): String {
+        when (verification?.engagementMethod) {
+            VerificationHelper.ENGAGEMENT_METHOD_QR_CODE -> return "QR Code"
+            VerificationHelper.ENGAGEMENT_METHOD_NFC_STATIC_HANDOVER -> return "NFC Static Handover"
+            VerificationHelper.ENGAGEMENT_METHOD_NFC_NEGOTIATED_HANDOVER -> return "NFC Negotiated Handover"
+            VerificationHelper.ENGAGEMENT_METHOD_REVERSE -> return "Reverse"
+        }
+        return "N/A"
+    }
+
 }

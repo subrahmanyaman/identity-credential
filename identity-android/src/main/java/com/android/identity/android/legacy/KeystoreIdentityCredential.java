@@ -26,7 +26,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.biometric.BiometricPrompt;
 
+import com.android.identity.android.securearea.AndroidKeystoreSecureArea;
+import com.android.identity.credential.Credential;
+import com.android.identity.credential.CredentialStore;
+import com.android.identity.credential.NameSpacedData;
 import com.android.identity.internal.Util;
+import com.android.identity.securearea.SecureArea;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -818,4 +823,37 @@ class KeystoreIdentityCredential extends IdentityCredential {
         return mData.getAuthKeyExpirations();
     }
 
+    /**
+     * Gets all the {@link PersonalizationData.NamespaceData} as a {@link NameSpacedData}.
+     *
+     * <p>This can be used with {@link #getCredentialKeyAlias()} to migrate this credential
+     * to {@link CredentialStore} without reprovisioning.
+     *
+     * @return the credential data, as a {@link NameSpacedData}.
+     */
+    public @NonNull NameSpacedData getNameSpacedData() {
+        if (!loadData()) {
+            throw new IllegalStateException("Error loading data");
+        }
+        NameSpacedData.Builder nsBuilder = new NameSpacedData.Builder();
+        for (PersonalizationData.NamespaceData namespaceData : mData.getNamespaceDatas()) {
+            for (String entryName : namespaceData.getEntryNames()) {
+                byte[] value = namespaceData.getEntryValue(entryName);
+                nsBuilder.putEntry(namespaceData.mNamespace, entryName, value);
+            }
+        }
+        return nsBuilder.build();
+    }
+
+    /**
+     * Gets the CredentialKey alias.
+     *
+     * @return the alias for CredentialKey.
+     */
+    public @NonNull String getCredentialKeyAlias() {
+        if (!loadData()) {
+            throw new IllegalStateException("Error loading data");
+        }
+        return mData.getCredentialKeyAlias();
+    }
 }

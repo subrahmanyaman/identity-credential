@@ -1,16 +1,18 @@
 plugins {
     alias libs.plugins.android.application
     alias libs.plugins.kotlin.android
+    alias libs.plugins.kotlinx.serialization.plugin
     alias libs.plugins.navigation.safe.args
     alias libs.plugins.parcelable
     alias libs.plugins.kapt
 }
 
 android {
+    namespace "com.android.identity.wallet"
     compileSdk libs.versions.compile.sdk.get() as int
 
     defaultConfig {
-        applicationId "com.android.mdl.app"
+        applicationId "com.android.identity.wallet"
         minSdkVersion libs.versions.min.sdk.get() as int
         targetSdkVersion libs.versions.compile.sdk.get() as int
         versionCode 1
@@ -26,13 +28,25 @@ android {
         }
     }
 
+    flavorDimensions.addAll("standard")
+    productFlavors {
+        wallet {
+            dimension "standard"
+            getIsDefault().set(true)
+        }
+        purse {
+            dimension "standard"
+            applicationIdSuffix ".purse"
+        }
+    }
+
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '11'
     }
 
     buildFeatures {
@@ -45,7 +59,6 @@ android {
         kotlinCompilerExtensionVersion libs.versions.kotlin.compiler.extension.get()
     }
 
-
     testOptions.unitTests.all {
         useJUnitPlatform()
         testLogging {
@@ -53,7 +66,6 @@ android {
         }
     }
 
-    namespace 'com.android.mdl.app'
     lint {
         lintConfig file('lint.xml')
     }
@@ -68,16 +80,13 @@ dependencies {
     implementation libs.bundles.androidx.core
     implementation libs.bundles.androidx.lifecycle
     implementation libs.bundles.androidx.navigation
-    implementation libs.bundles.androidx.room
     implementation libs.bundles.androidx.crypto
     implementation libs.bundles.bouncy.castle
     implementation libs.bundles.compose
-    implementation libs.volley
     implementation libs.cbor
     implementation libs.exifinterface
     implementation libs.code.scanner
-
-    kapt libs.androidx.room.kapt
+    implementation libs.kotlinx.serialization
 
     androidTestImplementation libs.bundles.ui.testing
 

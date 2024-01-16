@@ -16,13 +16,18 @@ import androidx.activity.OnBackPressedCallback
 import androidx.annotation.AttrRes
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
+import com.android.identity.credentialtype.CredentialAttributeType
+import com.android.identity.credentialtype.MdocDataElement
+import com.android.identity.internal.Util
 import com.android.identity.mdoc.response.DeviceResponseParser
+import com.android.identity.securearea.SecureArea
 import com.android.mdl.appreader.R
+import com.android.mdl.appreader.VerifierApp
 import com.android.mdl.appreader.databinding.FragmentShowDocumentBinding
-import com.android.mdl.appreader.issuerauth.SimpleIssuerTrustStore
 import com.android.mdl.appreader.transfer.TransferManager
+import com.android.mdl.appreader.trustmanagement.CustomValidators
+import com.android.mdl.appreader.trustmanagement.getCommonName
 import com.android.mdl.appreader.util.FormatUtil
-import com.android.mdl.appreader.util.KeysAndCertificates
 import com.android.mdl.appreader.util.TransferStatus
 import com.android.mdl.appreader.util.logDebug
 import java.security.MessageDigest
@@ -34,9 +39,7 @@ class ShowDocumentFragment : Fragment() {
 
     companion object {
         private const val MDL_DOCTYPE = "org.iso.18013.5.1.mDL"
-        private const val MICOV_DOCTYPE = "org.micov.1"
         private const val MDL_NAMESPACE = "org.iso.18013.5.1"
-        private const val MICOV_ATT_NAMESPACE = "org.micov.attestation.1"
         private const val EU_PID_DOCTYPE = "eu.europa.ec.eudiw.pid.1"
         private const val EU_PID_NAMESPACE = "eu.europa.ec.eudiw.pid.1"
     }
@@ -142,6 +145,7 @@ class ShowDocumentFragment : Fragment() {
                     transferManager.disconnect()
                     hideButtons()
                 }
+
                 else -> {}
             }
         }
@@ -155,65 +159,79 @@ class ShowDocumentFragment : Fragment() {
         binding.btNewRequest.visibility = View.GONE
     }
 
-    private fun formatTextResult(documents: Collection<DeviceResponseParser.Document>): String {
-        // Create the trustManager to validate the DS Certificate against the list of known
-        // certificates in the app
-        val simpleIssuerTrustStore =
-            SimpleIssuerTrustStore(KeysAndCertificates.getTrustedIssuerCertificates(requireContext()))
+    private fun curveNameFor(ecCurve: Int): String {
+        return when (ecCurve) {
+            SecureArea.EC_CURVE_P256 -> "P-256"
+            SecureArea.EC_CURVE_P384 -> "P-384"
+            SecureArea.EC_CURVE_P521 -> "P-521"
+            SecureArea.EC_CURVE_BRAINPOOLP256R1 -> "BrainpoolP256R1"
+            SecureArea.EC_CURVE_BRAINPOOLP320R1 -> "BrainpoolP320R1"
+            SecureArea.EC_CURVE_BRAINPOOLP384R1 -> "BrainpoolP384R1"
+            SecureArea.EC_CURVE_BRAINPOOLP512R1 -> "BrainpoolP512R1"
+            SecureArea.EC_CURVE_ED25519 -> "Ed25519"
+            SecureArea.EC_CURVE_X25519 -> "X25519"
+            SecureArea.EC_CURVE_ED448 -> "Ed448"
+            SecureArea.EC_CURVE_X448 -> "X448"
+            else -> throw IllegalArgumentException("Unknown curve $ecCurve")
+        }
+    }
 
+    private fun formatTextResult(documents: Collection<DeviceResponseParser.Document>): String {
         val sb = StringBuffer()
 
         for (doc in documents) {
             if (!checkPortraitPresenceIfRequired(doc)) {
                 // Warn if portrait isn't included in the response.
-                sb.append("<h3>WARNING: <font color=\"red\">No portrait image provided "
-                        + "for ${doc.docType}.</font></h3><br>")
-                sb.append("<i>This means it's not possible to verify the presenter is the authorized "
-                        + "holder. Be careful doing any business transactions or inquiries until "
-                        + "proper identification is confirmed.</i><br>")
+                sb.append(
+                    "<h3>WARNING: <font color=\"red\">No portrait image provided "
+                            + "for ${doc.docType}.</font></h3><br>"
+                )
+                sb.append(
+                    "<i>This means it's not possible to verify the presenter is the authorized "
+                            + "holder. Be careful doing any business transactions or inquiries until "
+                            + "proper identification is confirmed.</i><br>"
+                )
                 sb.append("<br>")
             }
         }
 
-        sb.append("Number of documents returned: <b>${documents.size}</b><br>")
-        sb.append("Address: <b>" + transferManager.mdocConnectionMethod + "</b><br>")
+        // Get primary color from theme to use in the HTML formatted document.
+        val primaryColor = String.format(
+            "#%06X",
+            0xFFFFFF and requireContext().theme.attr(R.attr.colorPrimary).data
+        )
+
+        val totalDuration = transferManager.getTapToEngagementDurationMillis() +
+                transferManager.getEngagementToRequestDurationMillis() +
+                transferManager.getRequestToResponseDurationMillis()
+        sb.append("Tap to Engagement Received: ${transferManager.getTapToEngagementDurationMillis()} ms<br>")
+        sb.append("Engagement Received to Request Sent: ${transferManager.getEngagementToRequestDurationMillis()} ms<br>")
+        sb.append("Request Sent to Response Received: ${transferManager.getRequestToResponseDurationMillis()} ms<br>")
+        sb.append("<b>Total transaction time: <font color=\"$primaryColor\">$totalDuration ms</font></b><br>")
         sb.append("<br>")
+
+        sb.append("Engagement Method: <b>" + transferManager.getEngagementMethod() + "</b><br>")
+        sb.append("Device Retrieval Method: <b>" + transferManager.mdocConnectionMethod + "</b><br>")
+        sb.append("Session encryption curve: <b>" + curveNameFor(transferManager.getMdocSessionEncryptionCurve()) + "</b><br>")
+        sb.append("<br>")
+
         for (doc in documents) {
-            // Get primary color from theme to use in the HTML formatted document.
-            val color = String.format(
-                "#%06X",
-                0xFFFFFF and requireContext().theme.attr(R.attr.colorPrimary).data
+            sb.append("<h3>Doctype: <font color=\"$primaryColor\">${doc.docType}</font></h3>")
+            var certChain = doc.issuerCertificateChain.toList()
+            val customValidators = CustomValidators.getByDocType(doc.docType)
+            val result = VerifierApp.trustManagerInstance.verify(
+                chain = certChain,
+                customValidators = customValidators
             )
-            sb.append("<h3>Doctype: <font color=\"$color\">${doc.docType}</font></h3>")
-            val certPath =
-                simpleIssuerTrustStore.createCertificationTrustPath(doc.issuerCertificateChain.toList())
-            val isDSTrusted = simpleIssuerTrustStore.validateCertificationTrustPath(certPath)
-            // Use the issuer certificate chain if we could not build the certificate trust path
-            val certChain = if (certPath?.isNotEmpty() == true) {
-                certPath
-            } else {
-                doc.issuerCertificateChain.toList()
+            if (result.trustChain.any()) {
+                certChain = result.trustChain
+            }
+            if (!result.isTrusted) {
+                sb.append("${getFormattedCheck(false)}Error in certificate chain validation: ${result.error?.message}<br>")
             }
 
-            val issuerItems = certChain.last().issuerX500Principal.name.split(",")
-            var cnFound = false
-            val commonName = StringBuffer()
-            for (issuerItem in issuerItems) {
-                when {
-                    issuerItem.contains("O=") -> {
-                        val (key, value) = issuerItem.split("=", limit = 2)
-                        commonName.append(value)
-                        cnFound = true
-                    }
-                    // Common Name value with ',' symbols would be treated as set of items
-                    // Append all parts of CN field if any before next issuer item
-                    cnFound && !issuerItem.contains("=") -> commonName.append(", $issuerItem")
-                    // Ignore any next issuer items only after we've collected required
-                    cnFound -> break
-                }
-            }
-
-            sb.append("${getFormattedCheck(isDSTrusted)}Issuer’s DS Key Recognized: ($commonName)<br>")
+            val commonName = certChain.last().issuerX500Principal.getCommonName("")
+            sb.append("${getFormattedCheck(result.isTrusted)}Issuer’s DS Key Recognized: ($commonName)<br>")
             sb.append("${getFormattedCheck(doc.issuerSignedAuthenticated)}Issuer Signed Authenticated<br>")
             var macOrSignatureString = "MAC"
             if (doc.deviceSignedAuthenticatedViaSignature)
@@ -242,6 +260,7 @@ class ShowDocumentFragment : Fragment() {
             // Just show the SHA-1 of DeviceKey since all we're interested in here is whether
             // we saw the same key earlier.
             sb.append("<h6>DeviceKey</h6>")
+            sb.append("${getFormattedCheck(true)}Curve: <b>${curveNameFor(Util.getCurve(doc.deviceKey))}</b><br>")
             val deviceKeySha1 = FormatUtil.encodeToString(
                 MessageDigest.getInstance("SHA-1").digest(doc.deviceKey.encoded)
             )
@@ -256,10 +275,10 @@ class ShowDocumentFragment : Fragment() {
                 for (elem in doc.getIssuerEntryNames(ns)) {
                     val value: ByteArray = doc.getIssuerEntryData(ns, elem)
                     var valueStr: String
-                    if (isPortraitElement(doc.docType, ns, elem)) {
-                        valueStr = String.format("(%d bytes, shown above)", value.size)
-                        portraitBytes = doc.getIssuerEntryByteString(ns, elem)
-                    } else if (doc.docType == MICOV_DOCTYPE && ns == MICOV_ATT_NAMESPACE && elem == "fac") {
+                    val mdocDataElement =
+                        VerifierApp.credentialTypeRepositoryInstance.getMdocCredentialType(doc.docType)?.namespaces?.get(ns)?.dataElements?.get(elem)
+                    val name = mdocDataElement?.attribute?.displayName ?: elem
+                    if (isPortraitElement(mdocDataElement)) {
                         valueStr = String.format("(%d bytes, shown above)", value.size)
                         portraitBytes = doc.getIssuerEntryByteString(ns, elem)
                     } else if (doc.docType == MDL_DOCTYPE && ns == MDL_NAMESPACE && elem == "extra") {
@@ -267,12 +286,19 @@ class ShowDocumentFragment : Fragment() {
                     } else if (doc.docType == MDL_DOCTYPE && ns == MDL_NAMESPACE && elem == "signature_usual_mark") {
                         valueStr = String.format("(%d bytes, shown below)", value.size)
                         signatureBytes = doc.getIssuerEntryByteString(ns, elem)
-                    } else if (doc.docType == EU_PID_DOCTYPE && ns == EU_PID_NAMESPACE && elem == "biometric_template_finger") {
-                        valueStr = String.format("%d bytes", value.size)
                     } else {
-                        valueStr = FormatUtil.cborPrettyPrint(value)
+                        valueStr = getPresentation(mdocDataElement, value)
                     }
-                    sb.append("${getFormattedCheck(doc.getIssuerEntryDigestMatch(ns, elem))}<b>$elem</b> -> $valueStr<br>")
+                    sb.append(
+                        "${
+                            getFormattedCheck(
+                                doc.getIssuerEntryDigestMatch(
+                                    ns,
+                                    elem
+                                )
+                            )
+                        }<b>$name</b> -> $valueStr<br>"
+                    )
                 }
                 sb.append("</p><br>")
             }
@@ -280,19 +306,17 @@ class ShowDocumentFragment : Fragment() {
         return sb.toString()
     }
 
-    private fun isPortraitApplicable(docType: String, namespace: String?): Boolean{
+    private fun isPortraitApplicable(docType: String, namespace: String?): Boolean {
         val hasPortrait = docType == MDL_DOCTYPE || docType == EU_PID_DOCTYPE
         val namespaceContainsPortrait = namespace == MDL_NAMESPACE || namespace == EU_PID_NAMESPACE
         return hasPortrait && namespaceContainsPortrait
     }
 
-    private fun isPortraitElement(
-        docType: String,
-        namespace: String?,
-        entryName: String?
-    ): Boolean {
-        val portraitApplicable = isPortraitApplicable(docType, namespace)
-        return portraitApplicable && entryName == "portrait"
+    private fun isPortraitElement(mdocDataElement: MdocDataElement?): Boolean {
+        if (mdocDataElement?.attribute?.type != CredentialAttributeType.PICTURE) {
+            return false
+        }
+        return listOf("portrait", "fac").contains(mdocDataElement.attribute.identifier)
     }
 
     // ISO/IEC 18013-5 requires the portrait image to be shared if the portrait was requested and if any other data element is released
@@ -310,6 +334,35 @@ class ShowDocumentFragment : Fragment() {
             }
         }
         return true
+    }
+
+    private fun getPresentation(mdocDataElement: MdocDataElement?, value: ByteArray): String {
+        return when (mdocDataElement?.attribute?.type) {
+            is CredentialAttributeType.STRING,
+            is CredentialAttributeType.DATE,
+            is CredentialAttributeType.DATE_TIME -> Util.cborDecodeString(value)
+
+            is CredentialAttributeType.NUMBER -> Util.cborDecodeLong(value).toString()
+            is CredentialAttributeType.PICTURE -> String.format("%d bytes", value.size)
+            is CredentialAttributeType.BOOLEAN -> Util.cborDecodeBoolean(value).toString()
+            is CredentialAttributeType.COMPLEX_TYPE -> FormatUtil.cborPrettyPrint(value)
+            is CredentialAttributeType.StringOptions -> {
+                val key = Util.cborDecodeString(value)
+                val options =
+                    (mdocDataElement.attribute.type as CredentialAttributeType.StringOptions).options
+                return options.find { it.value.equals(key) }?.displayName?: key
+            }
+
+            is CredentialAttributeType.IntegerOptions -> {
+                val key = Util.cborDecodeLong(value)
+                val options =
+                    (mdocDataElement.attribute.type as CredentialAttributeType.IntegerOptions).options
+                return options.find { it.value?.toLong() == key }?.displayName?: key.toString()
+            }
+
+            else -> FormatUtil.cborPrettyPrint(value)
+        }
+
     }
 
     private fun Resources.Theme.attr(@AttrRes attribute: Int): TypedValue {

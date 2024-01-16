@@ -16,7 +16,7 @@
 
 package com.android.identity.credential;
 
-import com.android.identity.securearea.BouncyCastleSecureArea;
+import com.android.identity.securearea.SoftwareSecureArea;
 import com.android.identity.securearea.SecureArea;
 import com.android.identity.securearea.SecureAreaRepository;
 import com.android.identity.storage.EphemeralStorageEngine;
@@ -39,7 +39,7 @@ public class CredentialUtilTest {
         mStorageEngine = new EphemeralStorageEngine();
 
         mSecureAreaRepository = new SecureAreaRepository();
-        mSecureArea = new BouncyCastleSecureArea(mStorageEngine);
+        mSecureArea = new SoftwareSecureArea(mStorageEngine);
         mSecureAreaRepository.addImplementation(mSecureArea);
     }
 
@@ -50,15 +50,13 @@ public class CredentialUtilTest {
                 mSecureAreaRepository);
 
         Credential credential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
+                "testCredential");
 
         Assert.assertEquals(0, credential.getAuthenticationKeys().size());
         Assert.assertEquals(0, credential.getPendingAuthenticationKeys().size());
 
         SecureArea.CreateKeySettings authKeySettings =
-                new BouncyCastleSecureArea.CreateKeySettings.Builder()
-                        .build();
+                new SecureArea.CreateKeySettings(new byte[0]);
 
         int numAuthKeys = 10;
         int maxUsesPerKey = 5;
@@ -71,6 +69,7 @@ public class CredentialUtilTest {
         // valid until time 200.
         numKeysCreated = CredentialUtil.managedAuthenticationKeyHelper(
                 credential,
+                mSecureArea,
                 authKeySettings,
                 managedKeyDomain,
                 Timestamp.ofEpochMilli(100),
@@ -93,6 +92,7 @@ public class CredentialUtilTest {
         // Certifying again at this point should not make a difference.
         numKeysCreated = CredentialUtil.managedAuthenticationKeyHelper(
                 credential,
+                mSecureArea,
                 authKeySettings,
                 managedKeyDomain,
                 Timestamp.ofEpochMilli(100),
@@ -110,6 +110,7 @@ public class CredentialUtilTest {
         }
         numKeysCreated = CredentialUtil.managedAuthenticationKeyHelper(
                 credential,
+                mSecureArea,
                 authKeySettings,
                 managedKeyDomain,
                 Timestamp.ofEpochMilli(100),
@@ -130,6 +131,7 @@ public class CredentialUtilTest {
         }
         numKeysCreated = CredentialUtil.managedAuthenticationKeyHelper(
                 credential,
+                mSecureArea,
                 authKeySettings,
                 managedKeyDomain,
                 Timestamp.ofEpochMilli(100),
@@ -140,7 +142,7 @@ public class CredentialUtilTest {
         Assert.assertEquals(5, credential.getPendingAuthenticationKeys().size());
         count = 0;
         for (Credential.PendingAuthenticationKey pak : credential.getPendingAuthenticationKeys()) {
-            Assert.assertTrue(pak.getApplicationData().getBoolean(managedKeyDomain));
+            Assert.assertEquals(managedKeyDomain, pak.getDomain());
             pak.certify(new byte[] {1, (byte) count++},
                     Timestamp.ofEpochMilli(100),
                     Timestamp.ofEpochMilli(210));
@@ -172,6 +174,7 @@ public class CredentialUtilTest {
         // This should trigger just them for replacement
         numKeysCreated = CredentialUtil.managedAuthenticationKeyHelper(
                 credential,
+                mSecureArea,
                 authKeySettings,
                 managedKeyDomain,
                 Timestamp.ofEpochMilli(195),
@@ -182,7 +185,7 @@ public class CredentialUtilTest {
         Assert.assertEquals(5, credential.getPendingAuthenticationKeys().size());
         count = 0;
         for (Credential.PendingAuthenticationKey pak : credential.getPendingAuthenticationKeys()) {
-            Assert.assertTrue(pak.getApplicationData().getBoolean(managedKeyDomain));
+            Assert.assertEquals(managedKeyDomain, pak.getDomain());
             pak.certify(new byte[] {2, (byte) count++},
                     Timestamp.ofEpochMilli(100),
                     Timestamp.ofEpochMilli(210));

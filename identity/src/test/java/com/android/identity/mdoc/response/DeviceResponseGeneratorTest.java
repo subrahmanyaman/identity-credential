@@ -21,7 +21,7 @@ import com.android.identity.credential.CredentialRequest;
 import com.android.identity.credential.CredentialStore;
 import com.android.identity.credential.NameSpacedData;
 import com.android.identity.internal.Util;
-import com.android.identity.securearea.BouncyCastleSecureArea;
+import com.android.identity.securearea.SoftwareSecureArea;
 import com.android.identity.securearea.SecureArea;
 import com.android.identity.securearea.SecureAreaRepository;
 import com.android.identity.mdoc.mso.MobileSecurityObjectGenerator;
@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -109,11 +110,14 @@ public class DeviceResponseGeneratorTest {
         mStorageEngine = new EphemeralStorageEngine();
 
         mSecureAreaRepository = new SecureAreaRepository();
-        mSecureArea = new BouncyCastleSecureArea(mStorageEngine);
+        mSecureArea = new SoftwareSecureArea(mStorageEngine);
         mSecureAreaRepository.addImplementation(mSecureArea);
 
         provisionCredential();
     }
+
+    // This isn't really used, we only use a single domain.
+    private final String AUTH_KEY_DOMAIN = "domain";
 
     private void provisionCredential() throws Exception {
         CredentialStore credentialStore = new CredentialStore(
@@ -122,8 +126,7 @@ public class DeviceResponseGeneratorTest {
 
         // Create the credential...
         mCredential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
+                "testCredential");
         NameSpacedData nameSpacedData = new NameSpacedData.Builder()
                 .putEntryString("ns1", "foo1", "bar1")
                 .putEntryString("ns1", "foo2", "bar2")
@@ -131,7 +134,16 @@ public class DeviceResponseGeneratorTest {
                 .putEntryString("ns2", "bar1", "foo1")
                 .putEntryString("ns2", "bar2", "foo2")
                 .build();
-        mCredential.setNameSpacedData(nameSpacedData);
+        mCredential.getApplicationData().setNameSpacedData("credentialData", nameSpacedData);
+
+        Map<String, Map<String, byte[]>> overrides = new HashMap<>();
+        Map<String, byte[]> overridesForNs1 = new HashMap<>();
+        overridesForNs1.put("foo3", Util.cborEncodeString("bar3_override"));
+        overrides.put("ns1", overridesForNs1);
+
+        Map<String, List<String>> exceptions = new HashMap<>();
+        exceptions.put("ns1", Arrays.asList("foo3"));
+        exceptions.put("ns2", Arrays.asList("bar2"));
 
         // Create an authentication key... make sure the authKey used supports both
         // mdoc ECDSA and MAC authentication.
@@ -141,7 +153,9 @@ public class DeviceResponseGeneratorTest {
         mTimeValidityEnd = Timestamp.ofEpochMilli(nowMillis + 10 * 86400 * 1000);
         Credential.PendingAuthenticationKey pendingAuthKey =
                 mCredential.createPendingAuthenticationKey(
-                        new BouncyCastleSecureArea.CreateKeySettings.Builder()
+                        AUTH_KEY_DOMAIN,
+                        mSecureArea,
+                        new SoftwareSecureArea.CreateKeySettings.Builder(new byte[0])
                                 .setKeyPurposes(SecureArea.KEY_PURPOSE_SIGN
                                         | SecureArea.KEY_PURPOSE_AGREE_KEY)
                                 .build(),
@@ -158,7 +172,8 @@ public class DeviceResponseGeneratorTest {
         Map<String, List<byte[]>> issuerNameSpaces = MdocUtil.generateIssuerNameSpaces(
                 nameSpacedData,
                 deterministicRandomProvider,
-                16);
+                16,
+                overrides);
 
         for (String nameSpaceName : issuerNameSpaces.keySet()) {
             Map<Long, byte[]> digests = MdocUtil.calculateDigestsForNameSpace(
@@ -186,7 +201,7 @@ public class DeviceResponseGeneratorTest {
                 issuerCertChain));
 
         byte[] issuerProvidedAuthenticationData = new StaticAuthDataGenerator(
-                MdocUtil.stripIssuerNameSpaces(issuerNameSpaces),
+                MdocUtil.stripIssuerNameSpaces(issuerNameSpaces, exceptions),
                 encodedIssuerAuth).generate();
 
         // Now that we have issuer-provided authentication data we certify the authentication key.
@@ -219,7 +234,7 @@ public class DeviceResponseGeneratorTest {
 
         Map<String, List<byte[]>> mergedIssuerNamespaces = MdocUtil.mergeIssuerNamesSpaces(
                 request,
-                mCredential.getNameSpacedData(),
+                mCredential.getApplicationData().getNameSpacedData("credentialData"),
                 staticAuthData);
 
         DeviceResponseGenerator deviceResponseGenerator = new DeviceResponseGenerator(0);
@@ -273,7 +288,7 @@ public class DeviceResponseGeneratorTest {
         Assert.assertEquals(3, doc.getIssuerEntryNames("ns1").size());
         Assert.assertEquals("bar1", doc.getIssuerEntryString("ns1", "foo1"));
         Assert.assertEquals("bar2", doc.getIssuerEntryString("ns1", "foo2"));
-        Assert.assertEquals("bar3", doc.getIssuerEntryString("ns1", "foo3"));
+        Assert.assertEquals("bar3_override", doc.getIssuerEntryString("ns1", "foo3"));
         Assert.assertEquals("ns2", doc.getIssuerNamespaces().get(1));
         Assert.assertEquals(1, doc.getIssuerEntryNames("ns2").size());
         Assert.assertEquals("foo1", doc.getIssuerEntryString("ns2", "bar1"));
@@ -303,7 +318,7 @@ public class DeviceResponseGeneratorTest {
 
         Map<String, List<byte[]>> mergedIssuerNamespaces = MdocUtil.mergeIssuerNamesSpaces(
                 request,
-                mCredential.getNameSpacedData(),
+                mCredential.getApplicationData().getNameSpacedData("credentialData"),
                 staticAuthData);
 
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC");
@@ -353,7 +368,7 @@ public class DeviceResponseGeneratorTest {
 
         Map<String, List<byte[]>> mergedIssuerNamespaces = MdocUtil.mergeIssuerNamesSpaces(
                 request,
-                mCredential.getNameSpacedData(),
+                mCredential.getApplicationData().getNameSpacedData("credentialData"),
                 staticAuthData);
 
         // Check that DeviceSigned works.
@@ -395,7 +410,7 @@ public class DeviceResponseGeneratorTest {
         Assert.assertEquals(3, doc.getIssuerEntryNames("ns1").size());
         Assert.assertEquals("bar1", doc.getIssuerEntryString("ns1", "foo1"));
         Assert.assertEquals("bar2", doc.getIssuerEntryString("ns1", "foo2"));
-        Assert.assertEquals("bar3", doc.getIssuerEntryString("ns1", "foo3"));
+        Assert.assertEquals("bar3_override", doc.getIssuerEntryString("ns1", "foo3"));
         Assert.assertEquals("ns2", doc.getIssuerNamespaces().get(1));
         Assert.assertEquals(1, doc.getIssuerEntryNames("ns2").size());
         Assert.assertEquals("foo1", doc.getIssuerEntryString("ns2", "bar1"));
@@ -503,7 +518,7 @@ public class DeviceResponseGeneratorTest {
 
         Map<String, List<byte[]>> mergedIssuerNamespaces = MdocUtil.mergeIssuerNamesSpaces(
                 request,
-                mCredential.getNameSpacedData(),
+                mCredential.getApplicationData().getNameSpacedData("credentialData"),
                 staticAuthData);
 
         DeviceResponseGenerator deviceResponseGenerator = new DeviceResponseGenerator(0);
@@ -557,7 +572,7 @@ public class DeviceResponseGeneratorTest {
         Assert.assertEquals(2, doc.getIssuerEntryNames("ns1").size());
         Assert.assertEquals("bar1", doc.getIssuerEntryString("ns1", "foo1"));
         // Note: "ns1", "foo2" is not returned b/c it was marked as DoNotSend() above
-        Assert.assertEquals("bar3", doc.getIssuerEntryString("ns1", "foo3"));
+        Assert.assertEquals("bar3_override", doc.getIssuerEntryString("ns1", "foo3"));
         Assert.assertEquals("ns2", doc.getIssuerNamespaces().get(1));
         Assert.assertEquals(1, doc.getIssuerEntryNames("ns2").size());
         Assert.assertEquals("foo1", doc.getIssuerEntryString("ns2", "bar1"));

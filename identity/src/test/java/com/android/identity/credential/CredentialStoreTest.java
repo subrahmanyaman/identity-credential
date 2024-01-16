@@ -17,7 +17,7 @@
 package com.android.identity.credential;
 
 import com.android.identity.internal.Util;
-import com.android.identity.securearea.BouncyCastleSecureArea;
+import com.android.identity.securearea.SoftwareSecureArea;
 import com.android.identity.securearea.SecureArea;
 import com.android.identity.securearea.SecureAreaRepository;
 import com.android.identity.storage.EphemeralStorageEngine;
@@ -41,12 +41,15 @@ public class CredentialStoreTest {
 
     SecureAreaRepository mSecureAreaRepository;
 
+    // This isn't really used, we only use a single domain.
+    private final String AUTH_KEY_DOMAIN = "domain";
+
     @Before
     public void setup() {
         mStorageEngine = new EphemeralStorageEngine();
 
         mSecureAreaRepository = new SecureAreaRepository();
-        mSecureArea = new BouncyCastleSecureArea(mStorageEngine);
+        mSecureArea = new SoftwareSecureArea(mStorageEngine);
         mSecureAreaRepository.addImplementation(mSecureArea);
     }
 
@@ -60,8 +63,7 @@ public class CredentialStoreTest {
         Assert.assertEquals(0, credentialStore.listCredentials().size());
         for (int n = 0; n < 10; n++) {
             credentialStore.createCredential(
-                    "testCred" + n,
-                    new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
+                    "testCred" + n);
         }
         Assert.assertEquals(10, credentialStore.listCredentials().size());
         credentialStore.deleteCredential("testCred1");
@@ -83,39 +85,52 @@ public class CredentialStoreTest {
                 mSecureAreaRepository);
 
         Credential credential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
+                "testCredential");
         Assert.assertEquals("testCredential", credential.getName());
-        List<X509Certificate> certChain = credential.getAttestation();
-        Assert.assertTrue(certChain.size() >= 1);
 
         credential = credentialStore.lookupCredential("testCredential");
         Assert.assertNotNull(credential);
         Assert.assertEquals("testCredential", credential.getName());
-        List<X509Certificate> certChain2 = credential.getAttestation();
-        Assert.assertEquals(certChain.size(), certChain2.size());
-        for (int n = 0; n < certChain.size(); n++) {
-            Assert.assertEquals(certChain.get(n), certChain2.get(n));
-        }
 
         Assert.assertNull(credentialStore.lookupCredential("nonExistingCredential"));
-
-        // Check creating a credential with an existing name overwrites the existing one
-        credential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
-        Assert.assertEquals("testCredential", credential.getName());
-        // At least the leaf certificate should be different
-        List<X509Certificate> certChain3 = credential.getAttestation();
-        Assert.assertNotEquals(certChain3.get(0), certChain2.get(0));
-
-        credential = credentialStore.lookupCredential("testCredential");
-        Assert.assertNotNull(credential);
-        Assert.assertEquals("testCredential", credential.getName());
 
         credentialStore.deleteCredential("testCredential");
         Assert.assertNull(credentialStore.lookupCredential("testCredential"));
     }
+
+    /* Validates that the same instance is returned for the same credential name. This
+     * relies on Credential.equals() not being overridden.
+     */
+    @Test
+    public void testCaching() {
+        CredentialStore credentialStore = new CredentialStore(
+                mStorageEngine,
+                mSecureAreaRepository);
+
+        Credential a = credentialStore.createCredential(
+                "a");
+
+        Credential b = credentialStore.createCredential(
+                "b");
+
+        Assert.assertEquals(a, credentialStore.lookupCredential("a"));
+        Assert.assertEquals(a, credentialStore.lookupCredential("a"));
+        Assert.assertEquals(b, credentialStore.lookupCredential("b"));
+        Assert.assertEquals(b, credentialStore.lookupCredential("b"));
+
+        credentialStore.deleteCredential("a");
+        Assert.assertNull(credentialStore.lookupCredential("a"));
+
+        Credential a_prime = credentialStore.createCredential(
+                "a");
+        Assert.assertEquals(a_prime, credentialStore.lookupCredential("a"));
+        Assert.assertEquals(a_prime, credentialStore.lookupCredential("a"));
+
+        Assert.assertNotEquals(a_prime, a);
+
+        Assert.assertEquals(b, credentialStore.lookupCredential("b"));
+    }
+
 
     @Test
     public void testNameSpacedData() {
@@ -124,11 +139,7 @@ public class CredentialStoreTest {
                 mSecureAreaRepository);
 
         Credential credential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
-
-        // After creation, NameSpacedData is present but empty.
-        Assert.assertEquals(0, credential.getNameSpacedData().getNameSpaceNames().size());
+                "testCredential");
 
         NameSpacedData nameSpacedData = new NameSpacedData.Builder()
                 .putEntryString("ns1", "foo1", "bar1")
@@ -137,7 +148,7 @@ public class CredentialStoreTest {
                 .putEntryString("ns2", "bar1", "foo1")
                 .putEntryString("ns2", "bar2", "foo2")
                 .build();
-        credential.setNameSpacedData(nameSpacedData);
+        credential.getApplicationData().setNameSpacedData("credentialData", nameSpacedData);
 
         Credential loadedCredential = credentialStore.lookupCredential("testCredential");
         Assert.assertNotNull(loadedCredential);
@@ -146,8 +157,8 @@ public class CredentialStoreTest {
         // We check that NameSpacedData is preserved across loads by simply comparing the
         // encoded data.
         Assert.assertArrayEquals(
-                Util.cborEncode(credential.getNameSpacedData().toCbor()),
-                Util.cborEncode(loadedCredential.getNameSpacedData().toCbor()));
+                Util.cborEncode(credential.getApplicationData().getNameSpacedData("credentialData").toCbor()),
+                Util.cborEncode(loadedCredential.getApplicationData().getNameSpacedData("credentialData").toCbor()));
     }
 
     @Test
@@ -157,8 +168,7 @@ public class CredentialStoreTest {
                 mSecureAreaRepository);
 
         Credential credential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
+                "testCredential");
 
         Timestamp timeBeforeValidity = Timestamp.ofEpochMilli(40);
         Timestamp timeValidityBegin = Timestamp.ofEpochMilli(50);
@@ -169,6 +179,7 @@ public class CredentialStoreTest {
         // By default, we don't have any auth keys nor any pending auth keys.
         Assert.assertEquals(0, credential.getAuthenticationKeys().size());
         Assert.assertEquals(0, credential.getPendingAuthenticationKeys().size());
+        Assert.assertEquals(0, credential.getAuthenticationKeyCounter());
 
         // Since none are certified or even pending yet, we can't present anything.
         Assert.assertNull(credential.findAuthenticationKey(timeDuringValidity));
@@ -176,11 +187,14 @@ public class CredentialStoreTest {
         // Create ten authentication keys...
         for (int n = 0; n < 10; n++) {
             credential.createPendingAuthenticationKey(
-                    new BouncyCastleSecureArea.CreateKeySettings.Builder().build(),
+                    AUTH_KEY_DOMAIN,
+                    mSecureArea,
+                    new SecureArea.CreateKeySettings(new byte[0]),
                     null);
         }
         Assert.assertEquals(0, credential.getAuthenticationKeys().size());
         Assert.assertEquals(10, credential.getPendingAuthenticationKeys().size());
+        Assert.assertEquals(10, credential.getAuthenticationKeyCounter());
 
         // ... and certify all of them
         int n = 0;
@@ -191,6 +205,7 @@ public class CredentialStoreTest {
                     issuerProvidedAuthenticationData,
                     timeValidityBegin,
                     timeValidityEnd);
+            Assert.assertEquals(n, pendingAuthenticationKey.getAuthenticationKeyCounter());
         }
         Assert.assertEquals(10, credential.getAuthenticationKeys().size());
         Assert.assertEquals(0, credential.getPendingAuthenticationKeys().size());
@@ -247,17 +262,23 @@ public class CredentialStoreTest {
         // Create and certify five replacements
         for (n = 0; n < 5; n++) {
             credential.createPendingAuthenticationKey(
-                    new BouncyCastleSecureArea.CreateKeySettings.Builder().build(),
+                    AUTH_KEY_DOMAIN,
+                    mSecureArea,
+                    new SecureArea.CreateKeySettings(new byte[0]),
                     null);
         }
         Assert.assertEquals(10, credential.getAuthenticationKeys().size());
         Assert.assertEquals(5, credential.getPendingAuthenticationKeys().size());
+        Assert.assertEquals(15, credential.getAuthenticationKeyCounter());
+        n = 11;
         for (Credential.PendingAuthenticationKey pendingAuthenticationKey :
                 credential.getPendingAuthenticationKeys()) {
             pendingAuthenticationKey.certify(
                     new byte[0],
                     timeValidityBegin,
                     timeValidityEnd);
+            Assert.assertEquals(n, pendingAuthenticationKey.getAuthenticationKeyCounter());
+            n++;
         }
         Assert.assertEquals(15, credential.getAuthenticationKeys().size());
         Assert.assertEquals(0, credential.getPendingAuthenticationKeys().size());
@@ -301,8 +322,7 @@ public class CredentialStoreTest {
                 mSecureAreaRepository);
 
         Credential credential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
+                "testCredential");
 
         Assert.assertEquals(0, credential.getAuthenticationKeys().size());
         Assert.assertEquals(0, credential.getPendingAuthenticationKeys().size());
@@ -310,7 +330,9 @@ public class CredentialStoreTest {
         // Create ten pending auth keys and certify four of them
         for (n = 0; n < 4; n++) {
             credential.createPendingAuthenticationKey(
-                    new BouncyCastleSecureArea.CreateKeySettings.Builder().build(),
+                    AUTH_KEY_DOMAIN,
+                    mSecureArea,
+                    new SecureArea.CreateKeySettings(new byte[0]),
                     null);
         }
         Assert.assertEquals(0, credential.getAuthenticationKeys().size());
@@ -334,7 +356,9 @@ public class CredentialStoreTest {
         Assert.assertEquals(0, credential.getPendingAuthenticationKeys().size());
         for (n = 0; n < 6; n++) {
             credential.createPendingAuthenticationKey(
-                    new BouncyCastleSecureArea.CreateKeySettings.Builder().build(),
+                    AUTH_KEY_DOMAIN,
+                    mSecureArea,
+                    new SecureArea.CreateKeySettings(new byte[0]),
                     null);
         }
         Assert.assertEquals(4, credential.getAuthenticationKeys().size());
@@ -378,8 +402,7 @@ public class CredentialStoreTest {
                 mSecureAreaRepository);
 
         Credential credential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
+                "testCredential");
 
         // We want to check the behavior for when the holder has a birthday and the issuer
         // carefully sends half the MSOs to be used before the birthday (with age_in_years set to
@@ -400,7 +423,9 @@ public class CredentialStoreTest {
         int n;
         for (n = 0; n < 10; n++) {
             credential.createPendingAuthenticationKey(
-                    new BouncyCastleSecureArea.CreateKeySettings.Builder().build(),
+                    AUTH_KEY_DOMAIN,
+                    mSecureArea,
+                    new SecureArea.CreateKeySettings(new byte[0]),
                     null);
         }
         Assert.assertEquals(10, credential.getPendingAuthenticationKeys().size());
@@ -455,11 +480,7 @@ public class CredentialStoreTest {
                 mSecureAreaRepository);
 
         Credential credential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
-
-        // After creation, NameSpacedData is present but empty.
-        Assert.assertEquals(0, credential.getNameSpacedData().getNameSpaceNames().size());
+                "testCredential");
 
         ApplicationData appData = credential.getApplicationData();
         Assert.assertFalse(appData.keyExists("key1"));
@@ -505,16 +526,14 @@ public class CredentialStoreTest {
                 mSecureAreaRepository);
 
         Credential credential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
+                "testCredential");
 
-        SecureArea.CreateKeySettings authKeySettings =
-                new BouncyCastleSecureArea.CreateKeySettings.Builder()
-                        .build();
         for (int n = 0; n < 10; n++) {
             Credential.PendingAuthenticationKey pendingAuthKey =
                     credential.createPendingAuthenticationKey(
-                            new BouncyCastleSecureArea.CreateKeySettings.Builder().build(),
+                            AUTH_KEY_DOMAIN,
+                            mSecureArea,
+                            new SecureArea.CreateKeySettings(new byte[0]),
                             null);
             String value = String.format(Locale.US, "bar%02d", n);
             ApplicationData pendingAppData = pendingAuthKey.getApplicationData();
@@ -590,19 +609,17 @@ public class CredentialStoreTest {
                 mSecureAreaRepository);
 
         Credential credential = credentialStore.createCredential(
-                "testCredential",
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build());
+                "testCredential");
 
         Assert.assertEquals(0, credential.getAuthenticationKeys().size());
         Assert.assertEquals(0, credential.getPendingAuthenticationKeys().size());
 
-        SecureArea.CreateKeySettings authKeySettings =
-                new BouncyCastleSecureArea.CreateKeySettings.Builder()
-                        .build();
         for (int n = 0; n < 10; n++) {
             Credential.PendingAuthenticationKey pendingAuthKey =
                     credential.createPendingAuthenticationKey(
-                            new BouncyCastleSecureArea.CreateKeySettings.Builder().build(),
+                            AUTH_KEY_DOMAIN,
+                            mSecureArea,
+                            new SecureArea.CreateKeySettings(new byte[0]),
                             null);
             pendingAuthKey.certify(new byte[] {0, (byte) n},
                     Timestamp.ofEpochMilli(100),
@@ -616,7 +633,9 @@ public class CredentialStoreTest {
         Assert.assertArrayEquals(new byte[] {0, 5}, keyToReplace.getIssuerProvidedData());
         Credential.PendingAuthenticationKey pendingAuthKey =
                 credential.createPendingAuthenticationKey(
-                        new BouncyCastleSecureArea.CreateKeySettings.Builder().build(),
+                        AUTH_KEY_DOMAIN,
+                        mSecureArea,
+                        new SecureArea.CreateKeySettings(new byte[0]),
                         keyToReplace);
         // ... it's not replaced until certify() is called
         Assert.assertEquals(1, credential.getPendingAuthenticationKeys().size());
@@ -653,7 +672,9 @@ public class CredentialStoreTest {
         Credential.AuthenticationKey toBeReplaced = credential.getAuthenticationKeys().get(0);
         Credential.PendingAuthenticationKey replacement =
                 credential.createPendingAuthenticationKey(
-                        new BouncyCastleSecureArea.CreateKeySettings.Builder().build(),
+                        AUTH_KEY_DOMAIN,
+                        mSecureArea,
+                        new SecureArea.CreateKeySettings(new byte[0]),
                         toBeReplaced);
         Assert.assertEquals(toBeReplaced, replacement.getReplacementFor());
         Assert.assertEquals(replacement, toBeReplaced.getReplacement());
@@ -663,7 +684,9 @@ public class CredentialStoreTest {
         // Similarly, test the case where the key to be replaced is prematurely deleted.
         // The replacement key should no longer indicate it's a replacement key.
         replacement = credential.createPendingAuthenticationKey(
-                new BouncyCastleSecureArea.CreateKeySettings.Builder().build(),
+                AUTH_KEY_DOMAIN,
+                mSecureArea,
+                new SecureArea.CreateKeySettings(new byte[0]),
                 toBeReplaced);
         Assert.assertEquals(toBeReplaced, replacement.getReplacementFor());
         Assert.assertEquals(replacement, toBeReplaced.getReplacement());
