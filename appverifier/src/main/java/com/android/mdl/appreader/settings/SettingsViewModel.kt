@@ -80,6 +80,12 @@ class SettingsViewModel(
         userPreferences.setReaderAuthentication(authentication)
     }
 
+    fun onDirectAccessDemoChanged(newValue: Boolean) {
+        userPreferences.setDirectAccessDemoEnabled(newValue)
+        mutableScreenState.update { it.copy(directAccessDemoEnabled = newValue) }
+    }
+
+
     private fun readUserPreferences(): SettingsScreenState {
         val autoClose = userPreferences.isAutoCloseConnectionEnabled()
         val bleL2cap = userPreferences.isBleL2capEnabled()
@@ -91,6 +97,7 @@ class SettingsViewModel(
         val nfcTransfer = userPreferences.isNfcTransferEnabled()
         val debugLogging = userPreferences.isDebugLoggingEnabled()
         val authentication = userPreferences.getReaderAuthentication()
+        val directAccessDemoEnabled = userPreferences.isDirectAccessDemoEnabled()
         return SettingsScreenState(
             isAutoCloseConnectionEnabled = autoClose,
             isL2CAPEnabled = bleL2cap,
@@ -101,7 +108,8 @@ class SettingsViewModel(
             isWifiAwareEnabled = wifiAware,
             isNfcTransferEnabled = nfcTransfer,
             isDebugLoggingEnabled = debugLogging,
-            readerAuthentication = authentication
+            readerAuthentication = authentication,
+            directAccessDemoEnabled = directAccessDemoEnabled
         )
     }
 

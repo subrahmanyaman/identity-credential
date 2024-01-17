@@ -109,7 +109,7 @@ public class VerificationHelper {
     byte[] mDeviceEngagement;
     byte[] mEncodedSessionTranscript;
     Executor mListenerExecutor;
-    IsoDep mNfcIsoDep;
+    IsoDepWrapper mIsoDepWrapper;
     // The handover used
     //
     private boolean mUseTransportSpecificSessionTermination;
@@ -268,6 +268,50 @@ public class VerificationHelper {
         // know this until we've received the first message with DeviceEngagement CBOR...
     }
 
+    // This is used for only testing purpose.
+    public void mockTagDiscovered(IsoDepWrapper wrapper) {
+        processTagDiscovered(null, wrapper);
+    }
+
+    private void processTagDiscovered(Tag tag, IsoDepWrapper wrapper) {
+        mTimestampNfcTap = Timestamp.now().toEpochMilli();
+        if (tag == null && wrapper == null) {
+            throw new IllegalStateException("Both tag and IsoDepWrapper are null.");
+        }
+        if (tag == null) {
+            mIsoDepWrapper = wrapper;
+        } else {
+            // Ignore mIsoDepWrapper if not null
+            mIsoDepWrapper = null;
+            // Find IsoDep since we're skipping NDEF checks and doing everything ourselves via APDUs
+            for (String tech : tag.getTechList()) {
+                Logger.d(TAG, "tech: " + tech);
+                if (tech.equals(IsoDep.class.getName())) {
+                    mIsoDepWrapper = new IsoDepWrapperImpl(tag);
+                    //mNfcIsoDep = (mIsoDepWrapper = null) ? mIsoDepWrapper.getIsoDep(tag) : IsoDep.get(tag);
+                    // If we're doing QR code engagement _and_ NFC data transfer
+                    // it's possible that we're now in a state where we're
+                    // waiting for the reader to be in the NFC field... see
+                    // also comment in connect() for this case...
+                    if (mDataTransport instanceof DataTransportNfc) {
+                        Logger.d(TAG, "NFC data transfer + QR engagement, "
+                            + "reader is now in field");
+
+                        startNfcDataTransport();
+
+                        // At this point we're done, don't start NFC handover.
+                        return;
+                    }
+                }
+            }
+
+            if (mIsoDepWrapper == null) {
+                Logger.d(TAG, "no IsoDep technology found");
+                return;
+            }
+        }
+        startNfcHandover();
+    }
 
     /**
      * Processes a {@link Tag} received when in NFC reader mode.
@@ -282,34 +326,7 @@ public class VerificationHelper {
     nfcProcessOnTagDiscovered(@NonNull Tag tag) {
         Logger.d(TAG, "Tag discovered!");
 
-        mTimestampNfcTap = Timestamp.now().toEpochMilli();
-
-        // Find IsoDep since we're skipping NDEF checks and doing everything ourselves via APDUs
-        for (String tech : tag.getTechList()) {
-            if (tech.equals(IsoDep.class.getName())) {
-                mNfcIsoDep = IsoDep.get(tag);
-                // If we're doing QR code engagement _and_ NFC data transfer
-                // it's possible that we're now in a state where we're
-                // waiting for the reader to be in the NFC field... see
-                // also comment in connect() for this case...
-                if (mDataTransport instanceof DataTransportNfc) {
-                    Logger.d(TAG, "NFC data transfer + QR engagement, "
-                            + "reader is now in field");
-
-                    startNfcDataTransport();
-
-                    // At this point we're done, don't start NFC handover.
-                    return;
-                }
-            }
-        }
-
-        if (mNfcIsoDep == null) {
-            Logger.d(TAG, "no IsoDep technology found");
-            return;
-        }
-
-        startNfcHandover();
+        processTagDiscovered(tag, null);
     }
 
     private void startNfcDataTransport() {
@@ -318,8 +335,8 @@ public class VerificationHelper {
             @Override
             public void run() {
                 try {
-                    mNfcIsoDep.connect();
-                    mNfcIsoDep.setTimeout(20 * 1000);  // 20 seconds
+                    mIsoDepWrapper.connect();
+                    mIsoDepWrapper.setTimeout(20 * 1000);  // 20 seconds
                 } catch (IOException e) {
                     reportError(e);
                     return;
@@ -380,7 +397,7 @@ public class VerificationHelper {
                 "Invalid QR Code device engagement text: " + qrDeviceEngagement));
     }
 
-    private @NonNull byte[] transceive(@NonNull IsoDep isoDep, @NonNull byte[] apdu)
+    private @NonNull byte[] transceive(@NonNull IsoDepWrapper isoDep, @NonNull byte[] apdu)
             throws IOException {
         Logger.dHex(TAG, "transceive: Sending APDU", apdu);
         byte[] ret = isoDep.transceive(apdu);
@@ -388,7 +405,7 @@ public class VerificationHelper {
         return ret;
     }
 
-    private byte[] readBinary(@NonNull IsoDep isoDep, int offset, int size)
+    private byte[] readBinary(@NonNull IsoDepWrapper isoDep, int offset, int size)
             throws IOException {
         byte[] apdu;
         byte[] ret;
@@ -402,7 +419,7 @@ public class VerificationHelper {
         return Arrays.copyOfRange(ret, 0, ret.length - 2);
     }
 
-    private byte[] ndefReadMessage(@NonNull IsoDep isoDep, double tWaitMillis, int nWait)
+    private byte[] ndefReadMessage(@NonNull IsoDepWrapper isoDep, double tWaitMillis, int nWait)
             throws IOException {
         byte[] apdu;
         byte[] ret;
@@ -449,7 +466,7 @@ public class VerificationHelper {
         return Arrays.copyOfRange(ret, 0, ret.length - 2);
     }
 
-    private byte[] ndefTransact(@NonNull IsoDep isoDep, @NonNull byte[] ndefMessage,
+    private byte[] ndefTransact(@NonNull IsoDepWrapper isoDep, @NonNull byte[] ndefMessage,
                                 double tWaitMillis, int nWait)
             throws IOException {
         byte[] apdu;
@@ -560,7 +577,7 @@ public class VerificationHelper {
 
         // TODO: also start these connection methods early...
 
-        final IsoDep isoDep = mNfcIsoDep;
+        final IsoDepWrapper isoDep = mIsoDepWrapper;
         Thread transceiverThread = new Thread() {
             @Override
             public void run() {
@@ -802,7 +819,7 @@ public class VerificationHelper {
     private void connectWithDataTransport(DataTransport transport) {
         mDataTransport = transport;
         if (mDataTransport instanceof DataTransportNfc) {
-            if (mNfcIsoDep == null) {
+            if (!mIsoDepWrapper.isTagSupported()) {
                 // This can happen if using NFC data transfer with QR code engagement
                 // which is allowed by ISO 18013-5:2021 (even though it's really
                 // weird). In this case we just sit and wait until the tag (reader)
@@ -813,7 +830,7 @@ public class VerificationHelper {
                 reportMoveIntoNfcField();
                 return;
             }
-            ((DataTransportNfc) mDataTransport).setIsoDep(mNfcIsoDep);
+            ((DataTransportNfc) mDataTransport).setIsoDep(mIsoDepWrapper);
         } else if (mDataTransport instanceof DataTransportBle) {
             // Helpful warning
             if (mOptions.getBleClearCache() && mDataTransport instanceof DataTransportBleCentralClientMode) {

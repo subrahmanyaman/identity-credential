@@ -7,14 +7,19 @@ import co.nstant.`in`.cbor.CborBuilder
 import co.nstant.`in`.cbor.model.DataItem
 import co.nstant.`in`.cbor.model.UnicodeString
 import com.android.identity.*
+import com.android.identity.android.direct_access.CredentialDataParser
+import com.android.identity.android.direct_access.MDocCredential
 import com.android.identity.android.legacy.*
 import com.android.identity.credential.Credential
 import com.android.identity.credential.NameSpacedData
 import com.android.identity.credentialtype.CredentialAttributeType
+import com.android.identity.internal.Util
 import com.android.identity.wallet.selfsigned.SelfSignedDocumentData
 import com.android.identity.wallet.util.Field
 import com.android.identity.wallet.util.FormatUtil
+import com.android.identity.wallet.util.PreferencesHelper
 import com.android.identity.wallet.util.ProvisioningUtil
+import com.android.identity.wallet.util.ProvisioningUtil.Companion.toDADocumentInformation
 import com.android.identity.wallet.util.ProvisioningUtil.Companion.toDocumentInformation
 import java.io.ByteArrayOutputStream
 import java.util.*
@@ -34,33 +39,63 @@ class DocumentManager private constructor(private val context: Context) {
     }
 
     fun getDocumentInformation(documentName: String): DocumentInformation? {
-        val credentialStore = ProvisioningUtil.getInstance(context).credentialStore
-        val credential = credentialStore.lookupCredential(documentName)
-        return credential.toDocumentInformation()
+        if (PreferencesHelper.isDirectAccessDemoEnabled()) {
+            val credentialStore = ProvisioningUtil.getInstance(context).daCredentialStore
+            val credential = credentialStore.lookupCredential(documentName)
+            return credential?.toDADocumentInformation()
+        } else {
+            val credentialStore = ProvisioningUtil.getInstance(context).credentialStore
+            val credential = credentialStore.lookupCredential(documentName)
+            return credential.toDocumentInformation()
+        }
+    }
+
+    fun getMDocCredentialByName(documentName: String): MDocCredential? {
+        val documentInfo = getDocumentInformation(documentName)
+            documentInfo?.let {
+                val credentialStore = ProvisioningUtil.getInstance(context).daCredentialStore
+                return credentialStore.lookupCredential(documentName)
+            }
+        return null
     }
 
     fun getCredentialByName(documentName: String): Credential? {
         val documentInfo = getDocumentInformation(documentName)
-        documentInfo?.let {
-            val credentialStore = ProvisioningUtil.getInstance(context).credentialStore
-            return credentialStore.lookupCredential(documentName)
-        }
+            documentInfo?.let {
+                val credentialStore = ProvisioningUtil.getInstance(context).credentialStore
+                return credentialStore.lookupCredential(documentName)
+            }
         return null
     }
 
     fun getDocuments(): List<DocumentInformation> {
-        val credentialStore = ProvisioningUtil.getInstance(context).credentialStore
-        return credentialStore.listCredentials().mapNotNull { documentName ->
-            val credential = credentialStore.lookupCredential(documentName)
-            credential.toDocumentInformation()
+        return if (PreferencesHelper.isDirectAccessDemoEnabled()) {
+            val daStore = ProvisioningUtil.getInstance(context).daCredentialStore
+            daStore.listCredentials().mapNotNull { documentName ->
+                val credential = daStore.lookupCredential(documentName)
+                credential?.toDADocumentInformation()
+            }
+        } else {
+            val credentialStore = ProvisioningUtil.getInstance(context).credentialStore
+            credentialStore.listCredentials().mapNotNull { documentName ->
+                val credential = credentialStore.lookupCredential(documentName)
+                credential.toDocumentInformation()
+            }
         }
     }
 
     fun deleteCredentialByName(documentName: String) {
         val document = getDocumentInformation(documentName)
-        document?.let {
-            val credentialStore = ProvisioningUtil.getInstance(context).credentialStore
-            credentialStore.deleteCredential(documentName)
+        if (PreferencesHelper.isDirectAccessDemoEnabled()) {
+            document?.let {
+                val credentialStore = ProvisioningUtil.getInstance(context).daCredentialStore
+                credentialStore.deleteCredential(documentName)
+            }
+        } else {
+            document?.let {
+                val credentialStore = ProvisioningUtil.getInstance(context).credentialStore
+                credentialStore.deleteCredential(documentName)
+            }
         }
     }
 
@@ -120,6 +155,16 @@ class DocumentManager private constructor(private val context: Context) {
                 }
 
                 is CredentialAttributeType.IntegerOptions -> {
+                    if (field.hasValue()) {
+                        builder.putEntryNumber(
+                            field.namespace!!,
+                            field.name,
+                            field.getValueLong()
+                        )
+                    }
+                }
+
+                is CredentialAttributeType.NUMBER -> {
                     if (field.hasValue()) {
                         builder.putEntryNumber(
                             field.namespace!!,

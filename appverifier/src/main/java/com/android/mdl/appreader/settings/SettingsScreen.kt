@@ -53,6 +53,7 @@ fun SettingsScreen(
     onDebugLoggingChanged: (enabled: Boolean) -> Unit,
     onChangeReaderAuthentication: (which: Int) -> Unit,
     onOpenCaCertificates: () -> Unit,
+    onDirectAccessDemoChanged: (Boolean) -> Unit,
 ) {
     Column(modifier = modifier) {
         val scrollState = rememberScrollState()
@@ -136,6 +137,14 @@ fun SettingsScreen(
                     subtitleOff = "Debug logging deactivated",
                     isChecked = screenState.isDebugLoggingEnabled,
                     onCheckedChange = onDebugLoggingChanged
+                )
+                SettingSectionTitle(title = "Direct Access Demo")
+                SettingToggle(
+                    title = "Direct Access Demo",
+                    subtitleOn = "Direct Access Demo activated",
+                    subtitleOff = "Direct Access Demo deactivated",
+                    isChecked = screenState.directAccessDemoEnabled,
+                    onCheckedChange = onDirectAccessDemoChanged
                 )
             }
             Spacer(modifier = Modifier.height(16.dp))
@@ -350,7 +359,8 @@ private fun SettingsScreenPreview() {
             onNfcTransferChanged = {},
             onDebugLoggingChanged = {},
             onChangeReaderAuthentication = {},
-            onOpenCaCertificates = {}
+            onOpenCaCertificates = {},
+            onDirectAccessDemoChanged = {}
         )
     }
 }

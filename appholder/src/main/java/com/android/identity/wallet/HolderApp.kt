@@ -2,11 +2,13 @@ package com.android.identity.wallet
 
 import android.app.Application
 import android.content.Context
+import com.android.identity.android.direct_access.MDocStore
 import com.android.identity.android.securearea.AndroidKeystoreSecureArea
 import com.android.identity.android.storage.AndroidStorageEngine
 import com.android.identity.android.util.AndroidLogPrinter
 import com.android.identity.credential.CredentialStore
 import com.android.identity.credentialtype.CredentialTypeRepository
+import com.android.identity.credentialtype.knowntypes.DirectAccessDrivingLicense
 import com.android.identity.credentialtype.knowntypes.DrivingLicense
 import com.android.identity.credentialtype.knowntypes.EUPersonalID
 import com.android.identity.credentialtype.knowntypes.VaccinationDocument
@@ -19,6 +21,7 @@ import com.android.identity.trustmanagement.TrustManager
 import com.android.identity.trustmanagement.TrustPoint
 import com.android.identity.util.Logger
 import com.android.identity.wallet.document.KeysAndCertificates
+import com.android.identity.wallet.document.JCardSimTransport
 import com.android.identity.wallet.util.PeriodicKeysRefreshWorkRequest
 import com.android.identity.wallet.util.PreferencesHelper
 import com.google.android.material.color.DynamicColors
@@ -57,6 +60,7 @@ class HolderApp: Application() {
         credentialTypeRepositoryInstance.addCredentialType(VehicleRegistration.getCredentialType())
         credentialTypeRepositoryInstance.addCredentialType(VaccinationDocument.getCredentialType())
         credentialTypeRepositoryInstance.addCredentialType(EUPersonalID.getCredentialType())
+        credentialTypeRepositoryInstance.addCredentialType(DirectAccessDrivingLicense.getCredentialType())
         trustManagerInstance = trustManager
         certificateStorageEngineInstance = certificateStorageEngine
         certificateStorageEngineInstance.enumerate().forEach {
@@ -86,6 +90,16 @@ class HolderApp: Application() {
             secureAreaRepository.addImplementation(androidKeystoreSecureArea)
             secureAreaRepository.addImplementation(softwareSecureArea)
             return CredentialStore(storageEngine, secureAreaRepository)
+        }
+
+        fun createMdocCredentialStore(
+            context: Context,
+            secureAreaRepository: SecureAreaRepository
+        ): MDocStore {
+            val storageDir = PreferencesHelper.getKeystoreBackedStorageLocation(context)
+            val storageEngine = AndroidStorageEngine.Builder(context, storageDir).build()
+
+            return MDocStore(JCardSimTransport.instance(), storageEngine);
         }
     }
 

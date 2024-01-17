@@ -26,3 +26,6 @@ dependencyResolutionManagement {
 }
 include ':appholder', ':appverifier', ':identity', ':identity-android', ':secure-area-test-app', ':wwwverifier'
 rootProject.name = 'Identity Credential'
+include ':smartcardio'
+include ':JCardSim'
+include ':mdlApplet'

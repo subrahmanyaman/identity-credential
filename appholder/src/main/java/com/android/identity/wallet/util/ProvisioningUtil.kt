@@ -8,13 +8,15 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
-import com.android.identity.android.securearea.AndroidKeystoreSecureArea
+import com.android.identity.android.direct_access.CredentialDataParser
+import com.android.identity.android.direct_access.MDocCredential
 import com.android.identity.credential.Credential
 import com.android.identity.credential.CredentialUtil
 import com.android.identity.credential.NameSpacedData
 import com.android.identity.internal.Util
 import com.android.identity.mdoc.mso.MobileSecurityObjectGenerator
 import com.android.identity.mdoc.mso.StaticAuthDataGenerator
+import com.android.identity.mdoc.mso.StaticCredentialDataGenerator
 import com.android.identity.mdoc.util.MdocUtil
 import com.android.identity.securearea.SecureArea
 import com.android.identity.securearea.SecureAreaRepository
@@ -24,11 +26,12 @@ import com.android.identity.wallet.document.DocumentInformation
 import com.android.identity.wallet.document.KeysAndCertificates
 import com.android.identity.wallet.selfsigned.ProvisionInfo
 import com.android.identity.wallet.support.SecureAreaSupport
-import com.android.identity.wallet.support.toSecureAreaState
 import com.android.identity.wallet.util.DocumentData.MICOV_DOCTYPE
 import com.android.identity.wallet.util.DocumentData.MVR_DOCTYPE
 import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
 import java.security.cert.X509Certificate
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -36,15 +39,98 @@ import java.time.format.DateTimeFormatter
 import java.util.Random
 
 class ProvisioningUtil private constructor(
-    private val context: Context
+    private val context: Context,
 ) {
 
     val secureAreaRepository = SecureAreaRepository()
     val credentialStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         HolderApp.createCredentialStore(context, secureAreaRepository)
     }
+    val daCredentialStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        HolderApp.createMdocCredentialStore(context, secureAreaRepository)
+    }
 
-    fun provisionSelfSigned(
+    private fun provisionSelfSignedDirectAccess(
+        nameSpacedData: NameSpacedData,
+        provisionInfo: ProvisionInfo,
+    ) {
+        val provisioningChallenge = "dummyChallenge".toByteArray(StandardCharsets.UTF_8)
+        val credential: MDocCredential = daCredentialStore.createCredential(
+            provisionInfo.credentialName(),
+            CredentialDataParser.MDL_DOC_TYPE,
+            provisioningChallenge,
+            provisionInfo.numberMso,
+            Duration.ofDays(provisionInfo.minValidityInDays.toLong()))
+        //val certChain = credential.credentialKeyCertificateChain
+        val authKeysNeedCert =
+        credential.getSigningKeyCertificationRequests(Duration.ZERO) // TODO What time to pass
+        val now = Timestamp.now()
+        val validFrom = now
+        val validityInDays = provisionInfo.validityInDays.toLong()
+        val validUntil = Timestamp.ofEpochMilli(validFrom.toEpochMilli() + validityInDays*86400*1000L)
+        for (authKeyCert : MDocCredential.MDocSigningKeyCertificationRequest in authKeysNeedCert) {
+            val msoGenerator = MobileSecurityObjectGenerator(
+                "SHA-256",
+                provisionInfo.docType,
+                authKeyCert.certificate.publicKey
+            )
+            msoGenerator.setValidityInfo(now, validFrom, validUntil, null)
+            val deterministicRandomProvider = Random(42)
+            val issuerNameSpaces = MdocUtil.generateIssuerNameSpaces(
+                nameSpacedData,
+                deterministicRandomProvider,
+                16,
+                null
+            )
+
+            for (nameSpaceName in issuerNameSpaces.keys) {
+                val digests = MdocUtil.calculateDigestsForNameSpace(
+                    nameSpaceName,
+                    issuerNameSpaces,
+                    "SHA-256"
+                )
+                msoGenerator.addDigestIdsForNamespace(nameSpaceName, digests)
+            }
+
+            val mso = msoGenerator.generate()
+            val taggedEncodedMso = Util.cborEncode(Util.cborBuildTaggedByteString(mso))
+
+            val issuerKeyPair = when (provisionInfo.docType) {
+                MVR_DOCTYPE -> KeysAndCertificates.getMekbDsKeyPair(context)
+                MICOV_DOCTYPE -> KeysAndCertificates.getMicovDsKeyPair(context)
+                else -> KeysAndCertificates.getMdlDsKeyPair(context)
+            }
+
+            val issuerCert = when (provisionInfo.docType) {
+                MVR_DOCTYPE -> KeysAndCertificates.getMekbDsCertificate(context)
+                MICOV_DOCTYPE -> KeysAndCertificates.getMicovDsCertificate(context)
+                else -> KeysAndCertificates.getMdlDsCertificate(context)
+            }
+
+            val issuerCertChain = ArrayList<X509Certificate>()
+            issuerCertChain.add(issuerCert)
+            val encodedIssuerAuth = Util.cborEncode(
+                Util.coseSign1Sign(
+                    issuerKeyPair.private,
+                    "SHA256withECDSA",
+                    taggedEncodedMso,
+                    null,
+                    issuerCertChain
+                )
+            )
+            val issuerProvidedCredentialData = StaticCredentialDataGenerator(
+                issuerNameSpaces,
+                encodedIssuerAuth,
+                provisionInfo.docType,
+                KeysAndCertificates.getTrustedReaderCertificates(context)
+            ).generate()
+            print(issuerProvidedCredentialData)
+            credential.provision(authKeyCert, Instant.now(), issuerProvidedCredentialData);
+        }
+        credential.swapIn(authKeysNeedCert[0]);
+    }
+
+    private fun provisionSelfSignedHce(
         nameSpacedData: NameSpacedData,
         provisionInfo: ProvisionInfo,
     ) {
@@ -76,6 +162,17 @@ class ProvisioningUtil private constructor(
 
         // Create initial batch of auth keys
         refreshAuthKeys(credential, provisionInfo.docType)
+    }
+
+    fun provisionSelfSigned(
+        nameSpacedData: NameSpacedData,
+        provisionInfo: ProvisionInfo,
+    ) {
+        if (PreferencesHelper.isDirectAccessDemoEnabled()) {
+            provisionSelfSignedDirectAccess(nameSpacedData, provisionInfo)
+        } else {
+            provisionSelfSignedHce(nameSpacedData, provisionInfo)
+        }
     }
 
     private fun ProvisionInfo.credentialName(): String {
@@ -301,6 +398,37 @@ class ProvisioningUtil private constructor(
                     selfSigned = it.applicationData.getBoolean(IS_SELF_SIGNED),
                     maxUsagesPerKey = it.applicationData.getNumber(MAX_USAGES_PER_KEY).toInt(),
                     lastTimeUsed = lastTimeUsed,
+                    authKeys = authKeys
+                )
+            }
+        }
+
+        fun MDocCredential?.toDADocumentInformation(): DocumentInformation? {
+            return this?.let {
+
+                val authKeys = it.signingKeysMetadata.map { metaData ->
+                    DocumentInformation.KeyData(
+                        counter = 0,
+                        validFrom = "",
+                        validUntil = "",
+                        domain = "",
+                        issuerDataBytesCount = 10000,
+                        usagesCount = metaData.usageCount,
+                        keyPurposes = 1,
+                        ecCurve = 1,
+                        isHardwareBacked = true,
+                        secureAreaDisplayName = ""
+                    )
+                }
+                DocumentInformation(
+                    userVisibleName = "Erika Driving License",
+                    docName = "erikas_da_driving_license",
+                    docType = "org.iso.18013.5.1.mDL",
+                    dateProvisioned = "",
+                    documentColor = 0,
+                    selfSigned = true,
+                    maxUsagesPerKey = 10,
+                    lastTimeUsed = "",
                     authKeys = authKeys
                 )
             }

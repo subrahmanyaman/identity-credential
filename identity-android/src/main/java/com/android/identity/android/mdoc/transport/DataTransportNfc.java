@@ -28,6 +28,8 @@ import android.util.Pair;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.identity.android.direct_access.DirectAccessTransport;
+import com.android.identity.android.mdoc.deviceretrieval.IsoDepWrapper;
 import com.android.identity.android.util.NfcUtil;
 import com.android.identity.mdoc.connectionmethod.ConnectionMethod;
 import com.android.identity.mdoc.connectionmethod.ConnectionMethodNfc;
@@ -51,7 +53,7 @@ import java.util.concurrent.TimeUnit;
 public class DataTransportNfc extends DataTransport {
     private static final String TAG = "DataTransportNfc";
     private final ConnectionMethodNfc mConnectionMethod;
-    IsoDep mIsoDep;
+    IsoDepWrapper mIsoDep;
     ArrayList<byte[]> mListenerRemainingChunks;
     int mListenerTotalChunks;
     int mListenerRemainingBytesAvailable;
@@ -209,7 +211,7 @@ public class DataTransportNfc extends DataTransport {
      *
      * @param isoDep the tag with {@link IsoDep} technology.
      */
-    public void setIsoDep(@NonNull IsoDep isoDep) {
+    public void setIsoDep(@NonNull IsoDepWrapper isoDep) {
         mIsoDep = isoDep;
     }
     
@@ -246,6 +248,15 @@ public class DataTransportNfc extends DataTransport {
         }
         DataTransportNfc transport = mActiveTransports.get(0);
         return transport.nfcDataTransferProcessCommandApdu(hostApduService, apdu);
+    }
+
+    public static @Nullable byte[] processCommandApdu(@NonNull DirectAccessTransport transport,
+        @NonNull byte[] apdu) {
+        try {
+            return  transport.sendData(apdu);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -517,18 +528,18 @@ public class DataTransportNfc extends DataTransport {
         baos.write(ins);
         baos.write(p1);
         baos.write(p2);
-        boolean hasExtendedLc = false;
-        if (data == null) {
-            baos.write(0);
-        } else if (data.length < 256) {
-            baos.write(data.length);
-        } else {
-            hasExtendedLc = true;
+        boolean isExtended = true;
+        if (le > 256 || (data != null && data.length > 256)) {
+            isExtended = true;
             baos.write(0x00);
-            baos.write(data.length / 0x100);
-            baos.write(data.length & 0xff);
         }
         if (data != null && data.length > 0) {
+            if ((isExtended && le > 256 && data.length < 256) || data.length > 256) {
+                baos.write(data.length / 0x100);
+                baos.write(data.length & 0xff);
+            } else {
+                baos.write(data.length);
+            }
             try {
                 baos.write(data);
             } catch (IOException e) {
@@ -541,9 +552,6 @@ public class DataTransportNfc extends DataTransport {
             } else if (le < 256) {
                 baos.write(le);
             } else {
-                if (!hasExtendedLc) {
-                    baos.write(0x00);
-                }
                 if (le == 65536) {
                     baos.write(0x00);
                     baos.write(0x00);

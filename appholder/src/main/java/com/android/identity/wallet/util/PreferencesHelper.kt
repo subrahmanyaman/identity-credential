@@ -20,6 +20,7 @@ object PreferencesHelper {
     private const val CONNECTION_AUTO_CLOSE = "connection_auto_close"
     private const val STATIC_HANDOVER = "static_handover"
     private const val EPHEMERAL_KEY_CURVE_OPTION = "ephemeral_key_curve"
+    private const val DIRECT_ACCESS_DEMO = "direct_access_demo"
 
     private lateinit var sharedPreferences: SharedPreferences
 
@@ -118,5 +119,13 @@ object PreferencesHelper {
 
     fun setEphemeralKeyCurveOption(@EcCurve newValue: Int) {
         sharedPreferences.edit { putInt(EPHEMERAL_KEY_CURVE_OPTION, newValue) }
+    }
+
+   fun isDirectAccessDemoEnabled(): Boolean {
+        return sharedPreferences.getBoolean(DIRECT_ACCESS_DEMO, false)
+    }
+
+    fun setDirectAccessDemoEnabled(enabled: Boolean) {
+        sharedPreferences.edit { putBoolean(DIRECT_ACCESS_DEMO, enabled) }
     }
 }

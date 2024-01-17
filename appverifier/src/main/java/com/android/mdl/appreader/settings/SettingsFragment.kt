@@ -48,6 +48,7 @@ class SettingsFragment : Fragment() {
                         onDebugLoggingChanged = viewModel::onDebugLoggingUpdated,
                         onChangeReaderAuthentication = viewModel::onReaderAuthenticationUpdated,
                         onOpenCaCertificates = {openCaCertificates()},
+                        onDirectAccessDemoChanged = viewModel::onDirectAccessDemoChanged
                     )
                 }
             }

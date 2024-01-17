@@ -12,6 +12,7 @@ import android.os.Bundle;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 
+import com.android.identity.android.direct_access.DirectAccessTransport;
 import com.android.identity.android.util.NfcUtil;
 import com.android.identity.android.mdoc.transport.DataTransport;
 import com.android.identity.android.mdoc.transport.DataTransportOptions;
@@ -291,6 +292,19 @@ public class NfcEngagementHelper {
      */
     public void nfcOnDeactivated(int reason) {
         Logger.d(TAG, String.format(Locale.US, "nfcOnDeactivated reason %d", reason));
+    }
+
+    public @NonNull byte[] nfcProcessCommandApdu(@NonNull byte[] apdu,
+        boolean directAccessMode, DirectAccessTransport transport) {
+        if (directAccessMode) {
+            try {
+                return transport.sendData(apdu);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            return nfcProcessCommandApdu(apdu);
+        }
     }
 
     /**

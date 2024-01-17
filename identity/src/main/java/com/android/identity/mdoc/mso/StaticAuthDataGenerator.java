@@ -120,4 +120,26 @@ public class StaticAuthDataGenerator {
         return staticAuthData;
     }
 
+    @NonNull
+    public byte[] generateCredentialData() {
+        CborBuilder digestIdBuilder = new CborBuilder();
+        MapBuilder<CborBuilder> outerBuilder = digestIdBuilder.addMap();
+        for (String namespace : mDigestIDMapping.keySet()) {
+            ArrayBuilder<MapBuilder<CborBuilder>> innerBuilder = outerBuilder.putArray(namespace);
+
+            for (byte[] encodedIssuerSignedItemMetadata : mDigestIDMapping.get(namespace)) {
+                innerBuilder.add(Util.cborDecode(encodedIssuerSignedItemMetadata));
+            }
+        }
+        DataItem digestIdMappingItem = digestIdBuilder.build().get(0);
+
+        byte[] staticAuthData = Util.cborEncode(new CborBuilder()
+            .addMap()
+            .put(new UnicodeString("digestIdMapping"), digestIdMappingItem)
+            .put(new UnicodeString("issuerAuth"), Util.cborDecode(mEncodedIssuerAuth))
+            .end()
+            .build().get(0));
+        return staticAuthData;
+    }
+
 }

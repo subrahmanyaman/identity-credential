@@ -7,6 +7,7 @@ import android.icu.util.GregorianCalendar
 import android.icu.util.TimeZone
 import android.os.Bundle
 import android.text.Html
+import android.util.Log
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
@@ -273,6 +274,7 @@ class ShowDocumentFragment : Fragment() {
                 sb.append("<h5>Namespace: $ns</h5>")
                 sb.append("<p>")
                 for (elem in doc.getIssuerEntryNames(ns)) {
+                    Log.d("ShowDocumentFragment", "element: "+elem)
                     val value: ByteArray = doc.getIssuerEntryData(ns, elem)
                     var valueStr: String
                     val mdocDataElement =
@@ -337,6 +339,7 @@ class ShowDocumentFragment : Fragment() {
     }
 
     private fun getPresentation(mdocDataElement: MdocDataElement?, value: ByteArray): String {
+        Log.d("ShowDocumentFragment", "getPresentation ele: "+mdocDataElement.toString())
         return when (mdocDataElement?.attribute?.type) {
             is CredentialAttributeType.STRING,
             is CredentialAttributeType.DATE,
