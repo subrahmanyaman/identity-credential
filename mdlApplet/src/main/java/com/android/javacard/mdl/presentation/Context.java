@@ -33,19 +33,19 @@ import javacard.framework.Util;
  */
 public class Context {
 
-  //Incremental Response states
-  public final static byte RESP_IDLE = 0;
-  public final static byte RESP_START = 1;
-  public final static byte RESP_DOCUMENT = 2;
-  public final static byte RESP_DEVICE_SIGNED = 3; // We do not divide this in individual parts.
-  public final static byte RESP_ISSUER_SIGNED = 4;
-  public final static byte RESP_ISSUER_AUTH = 5;
-  public final static byte RESP_ISSUER_NS = 6;
-  public final static byte RESP_NS_ELEMENTS = 7;
-  public final static byte RESP_NS_ELEMENT = 8;
-  public final static byte CURRENT_DOC = 0;
-  public final static byte CURRENT_STATE = 1;
-  public final static byte CURRENT_NAMESPACE = 2;
+  // Incremental Response states
+  public static final byte RESP_IDLE = 0;
+  public static final byte RESP_START = 1;
+  public static final byte RESP_DOCUMENT = 2;
+  public static final byte RESP_DEVICE_SIGNED = 3; // We do not divide this in individual parts.
+  public static final byte RESP_ISSUER_SIGNED = 4;
+  public static final byte RESP_ISSUER_AUTH = 5;
+  public static final byte RESP_ISSUER_NS = 6;
+  public static final byte RESP_NS_ELEMENTS = 7;
+  public static final byte RESP_NS_ELEMENT = 8;
+  public static final byte CURRENT_DOC = 0;
+  public static final byte CURRENT_STATE = 1;
+  public static final byte CURRENT_NAMESPACE = 2;
   public static final byte CURRENT_ELEMENT = 3;
   public static final byte CURRENT_DATA_PTR_START = 4;
   public static final byte CURRENT_DATA_PTR_END = 5;
@@ -80,7 +80,6 @@ public class Context {
   // Total number of documents that has to be sent in the response to the reader.
   byte[] mDocumentsCount;
 
-
   public Context(byte[] buffer, MdlSpecifications mdlSpecs) {
     mBuffer = buffer;
     mBufReadIndex = JCSystem.makeTransientShortArray((short) 1, JCSystem.CLEAR_ON_DESELECT);
@@ -88,8 +87,8 @@ public class Context {
     mRemainingBytes = JCSystem.makeTransientShortArray((short) 1, JCSystem.CLEAR_ON_DESELECT);
     mDocumentsCount = JCSystem.makeTransientByteArray((short) 1, JCSystem.CLEAR_ON_DESELECT);
     mChunkSize = JCSystem.makeTransientShortArray((short) 1, JCSystem.CLEAR_ON_DESELECT);
-    mIncrementalResponseState = JCSystem.makeTransientShortArray((short) 7,
-        JCSystem.CLEAR_ON_DESELECT);
+    mIncrementalResponseState =
+        JCSystem.makeTransientShortArray((short) 7, JCSystem.CLEAR_ON_DESELECT);
 
     // Array of enumerated requests
     mDocumentRequests = new DocumentRequest[MAX_DOC_REQUESTS];

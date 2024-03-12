@@ -89,14 +89,6 @@ class UserPreferences(
         preferences.edit { putInt(READER_AUTHENTICATION, authentication) }
     }
 
-    fun isDirectAccessDemoEnabled(): Boolean {
-        return preferences.getBoolean(DIRECT_ACCESS_DEMO, false)
-    }
-
-    fun setDirectAccessDemoEnabled(enabled: Boolean) {
-        preferences.edit { putBoolean(DIRECT_ACCESS_DEMO, enabled) }
-    }
-
     private companion object {
         private const val AUTO_CLOSE_CONNECTION = "auto_close_connection"
         private const val BLE_DATA_L2CAP = "ble_l2cap"
@@ -108,6 +100,5 @@ class UserPreferences(
         private const val NFC_TRANSFER_ENABLED = "nfc_transfer_enabled"
         private const val LOG_ENABLED = "log_enabled"
         private const val READER_AUTHENTICATION = "reader_authentication_mode"
-        private const val DIRECT_ACCESS_DEMO = "direct_access_demo"
     }
 }

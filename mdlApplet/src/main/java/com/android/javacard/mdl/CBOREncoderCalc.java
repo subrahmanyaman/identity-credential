@@ -22,17 +22,13 @@ package com.android.javacard.mdl;
  */
 public class CBOREncoderCalc extends CBOREncoder {
 
-  /**
-   * Increase the offset by one.
-   */
+  /** Increase the offset by one. */
   public short writeRawByte(byte val) {
     increaseOffset((short) 1);
     return (short) 1;
   }
 
-  /**
-   * Increase the offset by two.
-   */
+  /** Increase the offset by two. */
   short writeRawShort(short val) {
     increaseOffset((short) 2);
     return (short) 2;

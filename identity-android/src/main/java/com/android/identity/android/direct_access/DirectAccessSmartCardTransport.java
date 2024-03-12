@@ -102,7 +102,6 @@ public class DirectAccessSmartCardTransport implements DirectAccessTransport{
   public byte[] sendData(byte[] input) throws IOException {
     CommandAPDU apdu = getCommandApdu(input);
     ResponseAPDU resp = transmitCommand(apdu);
-    SEProvider.print(apdu.getBytes(), (short) 0, (short) apdu.getBytes().length);
     return resp.getBytes();
   }
   private static ResponseAPDU transmitCommand(CommandAPDU apdu){
@@ -111,7 +110,16 @@ public class DirectAccessSmartCardTransport implements DirectAccessTransport{
 
 
   public void installApplet(AID appletAid, Class<? extends Applet> appletClass) {
-    mJCardSim.installApplet(appletAid, appletClass);
+    byte installParamsSize = 8;
+    byte[] buf = new byte[installParamsSize];
+    short offset = 0;
+    buf[offset++] = 0; // iLen
+    buf[offset++] = 0; // cLen
+    buf[offset++] = 5; // app data len
+    buf[offset++] = 0; // false
+    offset = Util.setShort(buf, offset, (short) 0x7530);
+    Util.setShort(buf, offset, (short) 0x7530);
+    mJCardSim.installApplet(appletAid, appletClass, buf, (short) 0, installParamsSize);
   }
 
   public boolean select(AID aid){

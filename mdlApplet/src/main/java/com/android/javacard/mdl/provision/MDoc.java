@@ -22,7 +22,6 @@ import javacard.framework.JCSystem;
 import javacard.framework.Util;
 import javacard.security.AESKey;
 import javacard.security.ECPrivateKey;
-import javacard.security.ECPublicKey;
 import javacard.security.KeyBuilder;
 import javacard.security.KeyPair;
 
@@ -42,7 +41,8 @@ import javacard.security.KeyPair;
 public class MDoc {
 
   public static final byte[] AID_MDL_DIRECT_ACCESS_APPLET = {
-      (byte) 0xA0, 0x00, 0x00, 0x02, 0x48, 0x04, 0x00};
+    (byte) 0xA0, 0x00, 0x00, 0x02, 0x48, 0x04, 0x00
+  };
   static AID mPresentationAppletAid;
   static Object[] mPkgStore;
   private final AESKey mStorageKey;
@@ -60,17 +60,19 @@ public class MDoc {
     mSlotId = slotId;
     mCredentialKey = new KeyPair(KeyPair.ALG_EC_FP, KeyBuilder.LENGTH_EC_FP_256);
     mSEProvider.initECKey(mCredentialKey);
-    mStorageKey = (AESKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
-    MDoc.mPresentationAppletAid = new AID(AID_MDL_DIRECT_ACCESS_APPLET, (short) 0,
-        (byte) AID_MDL_DIRECT_ACCESS_APPLET.length);
+    mStorageKey =
+        (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
+    MDoc.mPresentationAppletAid =
+        new AID(
+            AID_MDL_DIRECT_ACCESS_APPLET, (short) 0, (byte) AID_MDL_DIRECT_ACCESS_APPLET.length);
     MDoc.mPkgStore = JCSystem.makeTransientObjectArray((short) 1, JCSystem.CLEAR_ON_DESELECT);
   }
 
   static MdlPresentationPkgStore getPkgStore() {
     if (mPkgStore[0] == null) {
-      mPkgStore[0] = JCSystem.getAppletShareableInterfaceObject(
-          mPresentationAppletAid, MdlPresentationPkgStore.SERVICE_ID);
+      mPkgStore[0] =
+          JCSystem.getAppletShareableInterfaceObject(
+              mPresentationAppletAid, MdlPresentationPkgStore.SERVICE_ID);
     }
     return (MdlPresentationPkgStore) mPkgStore[0];
   }
@@ -135,11 +137,7 @@ public class MDoc {
     mTestCred[0] = false;
     // Clear the keys. Here, the clearKey method is not used because it will reset the
     // initialization. Instead keys are set to zero.
-    ECPublicKey pubKey = ((ECPublicKey) mCredentialKey.getPublic());
     ECPrivateKey privateKey = ((ECPrivateKey) mCredentialKey.getPrivate());
-    len = pubKey.getW(scratch, start);
-    Util.arrayFillNonAtomic(scratch, start, len, (byte) 0);
-    pubKey.setW(scratch, start, len);
     len = privateKey.getS(scratch, start);
     Util.arrayFillNonAtomic(scratch, start, len, (byte) 0);
     privateKey.setS(scratch, start, len);
@@ -160,7 +158,6 @@ public class MDoc {
   public AESKey getStorageKey() {
     return mStorageKey;
   }
-
 
   public boolean isProvisioned() {
     return mProvisioned;

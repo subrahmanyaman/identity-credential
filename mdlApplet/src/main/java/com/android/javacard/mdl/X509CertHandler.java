@@ -48,21 +48,92 @@ public class X509CertHandler {
 
   // Android Extn - 1.3.6.1.4.1.11129.2.1.17
   private final byte[] androidExtn = {
-      0x06, 0x0A, 0X2B, 0X06, 0X01, 0X04, 0X01, (byte) 0XD6, 0X79, 0X02, 0X01, 0X11
+    0x06, 0x0A, 0X2B, 0X06, 0X01, 0X04, 0X01, (byte) 0XD6, 0X79, 0X02, 0X01, 0X11
   };
-  //TODO remove this once ROT solution is clarified.
+  // TODO remove this once ROT solution is clarified.
   private final byte[] dummyROT = {
-      (byte) 0xBF, (byte) 0x85, 0x40, 0x4C, 0x30, 0x4A, 0x04, 0x20,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x01, 0x01, 0x00, 0x0A, 0x01, 0x02, 0x04, 0x20,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    (byte) 0xBF,
+    (byte) 0x85,
+    0x40,
+    0x4C,
+    0x30,
+    0x4A,
+    0x04,
+    0x20,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x01,
+    0x00,
+    0x0A,
+    0x01,
+    0x02,
+    0x04,
+    0x20,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
   };
+
   /**
    * version [0] (1 elem) Version INTEGER 2 serialNumber CertificateSerialNumber INTEGER 1 signature
    * AlgorithmIdentifier SEQUENCE (1 elem) algorithm OBJECT IDENTIFIER 1.2.840.10045.4.3.2
@@ -81,32 +152,173 @@ public class X509CertHandler {
    * value AttributeValue UTF8String Android Keystore Software Attestation Intermediate
    */
   private final byte[] credKeyCertCommon_1 = {
-      (byte) 0xA0, 0x03, 0x02, 0x01, 0x02, 0x02, 0x01, 0x01, 0x30, 0x0A, 0x06, 0x08,
-      0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02, 0x30, (byte) 0x81, (byte) 0x88,
-      0x31,
-      0x0B, 0x30, 0x09, 0x06, 0x03, 0x55, 0x04, 0x06, 0x13, 0x02, 0x55, 0x53,
-      0x31, 0x13, 0x30, 0x11, 0x06, 0x03, 0x55, 0x04, 0x08, 0x0C, 0x0A, 0x43,
-      0x61, 0x6C, 0x69, 0x66, 0x6F, 0x72, 0x6E, 0x69, 0x61, 0x31, 0x15, 0x30,
-      0x13, 0x06, 0x03, 0x55, 0x04, 0x0A, 0x0C, 0x0C, 0x47, 0x6F, 0x6F, 0x67,
-      0x6C, 0x65, 0x2C, 0x20, 0x49, 0x6E, 0x63, 0x2E, 0x31, 0x10, 0x30, 0x0E,
-      0x06, 0x03, 0x55, 0x04, 0x0B, 0x0C, 0x07, 0x41, 0x6E, 0x64, 0x72, 0x6F,
-      0x69, 0x64, 0x31, 0x3B, 0x30, 0x39, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0C,
-      0x32, 0x41, 0x6E, 0x64, 0x72, 0x6F, 0x69, 0x64, 0x20, 0x4B, 0x65, 0x79,
-      0x73, 0x74, 0x6F, 0x72, 0x65, 0x20, 0x53, 0x6F, 0x66, 0x74, 0x77, 0x61,
-      0x72, 0x65, 0x20, 0x41, 0x74, 0x74, 0x65, 0x73, 0x74, 0x61, 0x74, 0x69,
-      0x6F, 0x6E, 0x20, 0x49, 0x6E, 0x74, 0x65, 0x72, 0x6D, 0x65, 0x64, 0x69,
-      0x61, 0x74, 0x65,
+    (byte) 0xA0,
+    0x03,
+    0x02,
+    0x01,
+    0x02,
+    0x02,
+    0x01,
+    0x01,
+    0x30,
+    0x0A,
+    0x06,
+    0x08,
+    0x2A,
+    (byte) 0x86,
+    0x48,
+    (byte) 0xCE,
+    0x3D,
+    0x04,
+    0x03,
+    0x02,
+    0x30,
+    (byte) 0x81,
+    (byte) 0x88,
+    0x31,
+    0x0B,
+    0x30,
+    0x09,
+    0x06,
+    0x03,
+    0x55,
+    0x04,
+    0x06,
+    0x13,
+    0x02,
+    0x55,
+    0x53,
+    0x31,
+    0x13,
+    0x30,
+    0x11,
+    0x06,
+    0x03,
+    0x55,
+    0x04,
+    0x08,
+    0x0C,
+    0x0A,
+    0x43,
+    0x61,
+    0x6C,
+    0x69,
+    0x66,
+    0x6F,
+    0x72,
+    0x6E,
+    0x69,
+    0x61,
+    0x31,
+    0x15,
+    0x30,
+    0x13,
+    0x06,
+    0x03,
+    0x55,
+    0x04,
+    0x0A,
+    0x0C,
+    0x0C,
+    0x47,
+    0x6F,
+    0x6F,
+    0x67,
+    0x6C,
+    0x65,
+    0x2C,
+    0x20,
+    0x49,
+    0x6E,
+    0x63,
+    0x2E,
+    0x31,
+    0x10,
+    0x30,
+    0x0E,
+    0x06,
+    0x03,
+    0x55,
+    0x04,
+    0x0B,
+    0x0C,
+    0x07,
+    0x41,
+    0x6E,
+    0x64,
+    0x72,
+    0x6F,
+    0x69,
+    0x64,
+    0x31,
+    0x3B,
+    0x30,
+    0x39,
+    0x06,
+    0x03,
+    0x55,
+    0x04,
+    0x03,
+    0x0C,
+    0x32,
+    0x41,
+    0x6E,
+    0x64,
+    0x72,
+    0x6F,
+    0x69,
+    0x64,
+    0x20,
+    0x4B,
+    0x65,
+    0x79,
+    0x73,
+    0x74,
+    0x6F,
+    0x72,
+    0x65,
+    0x20,
+    0x53,
+    0x6F,
+    0x66,
+    0x74,
+    0x77,
+    0x61,
+    0x72,
+    0x65,
+    0x20,
+    0x41,
+    0x74,
+    0x74,
+    0x65,
+    0x73,
+    0x74,
+    0x61,
+    0x74,
+    0x69,
+    0x6F,
+    0x6E,
+    0x20,
+    0x49,
+    0x6E,
+    0x74,
+    0x65,
+    0x72,
+    0x6D,
+    0x65,
+    0x64,
+    0x69,
+    0x61,
+    0x74,
+    0x65,
   };
-  /**
-   * SEQUENCE (2 elem)
-   *     UTCTime 2023-04-18 18:27:29 UTC
-   *     UTCTime 2026-01-08 00:46:09 UTC
-   */
-/*        0x30, 0x1E, 0x17, 0x0D, 0x32, 0x33, 0x30, 0x34, 0x31,
-            0x38, 0x31, 0x38, 0x32, 0x37, 0x32, 0x39, 0x5A, 0x17, 0x0D, 0x32, 0x36,
-            0x30, 0x31, 0x30, 0x38, 0x30, 0x30, 0x34, 0x36, 0x30, 0x39, 0x5A,
-            0x30,
-*/
+
+  /** SEQUENCE (2 elem) UTCTime 2023-04-18 18:27:29 UTC UTCTime 2026-01-08 00:46:09 UTC */
+  /*        0x30, 0x1E, 0x17, 0x0D, 0x32, 0x33, 0x30, 0x34, 0x31,
+              0x38, 0x31, 0x38, 0x32, 0x37, 0x32, 0x39, 0x5A, 0x17, 0x0D, 0x32, 0x36,
+              0x30, 0x31, 0x30, 0x38, 0x30, 0x30, 0x34, 0x36, 0x30, 0x39, 0x5A,
+              0x30,
+  */
   /**
    * subject Name SEQUENCE (1 elem) RelativeDistinguishedName SET (1 elem) AttributeTypeAndValue
    * SEQUENCE (2 elem) type AttributeType OBJECT IDENTIFIER 2.5.4.3 commonName (X.520 DN component)
@@ -117,54 +329,125 @@ public class X509CertHandler {
    * curve) <Add BIT STRING containing the CredKey's public_key following the above>
    */
   private final byte[] credKeyCommonName = {
-      0x30, 0x2A, 0x31, 0x28, 0x30, 0x26, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0C, 0x1F,
-      0x41, 0x6E, 0x64, 0x72, 0x6F, 0x69, 0x64, 0x20, 0x49, 0x64, 0x65, 0x6E,
-      0x74, 0x69, 0x74, 0x79, 0x20, 0x43, 0x72, 0x65, 0x64, 0x65, 0x6E, 0x74,
-      0x69, 0x61, 0x6C, 0x20, 0x4B, 0x65, 0x79,
+    0x30, 0x2A, 0x31, 0x28, 0x30, 0x26, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0C, 0x1F, 0x41, 0x6E, 0x64,
+    0x72, 0x6F, 0x69, 0x64, 0x20, 0x49, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x74, 0x79, 0x20, 0x43, 0x72,
+    0x65, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C, 0x20, 0x4B, 0x65, 0x79,
   };
+
   private final byte[] credKeyCertCommon_2 = {
-      0x30, 0x13, 0x06, 0x07, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x02, 0x01,
-      0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x03, 0x01, 0x07,
+    0x30,
+    0x13,
+    0x06,
+    0x07,
+    0x2A,
+    (byte) 0x86,
+    0x48,
+    (byte) 0xCE,
+    0x3D,
+    0x02,
+    0x01,
+    0x06,
+    0x08,
+    0x2A,
+    (byte) 0x86,
+    0x48,
+    (byte) 0xCE,
+    0x3D,
+    0x03,
+    0x01,
+    0x07,
   };
+
   /**
    * signatureAlgorithm AlgorithmIdentifier SEQUENCE (1 elem) algorithm OBJECT IDENTIFIER
    * 1.2.840.10045.4.3.2 ecdsaWithSHA256 (ANSI X9.62 ECDSA algorithm with SHA256)
    */
   private final byte[] credKeyCertCommon_3 = {
-      0x30, 0x0A, 0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02,
+    0x30, 0x0A, 0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02,
   };
+
   /**
    * signatureAlgorithm AlgorithmIdentifier SEQUENCE (1 elem) algorithm OBJECT IDENTIFIER
    * 1.2.840.10045.4.3.2 ecdsaWithSHA256 (ANSI X9.62 ECDSA algorithm with SHA256)
    */
   private final byte[] ecdsaWithSHA256 = {
-      0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02,
+    0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02,
   };
+
   private final byte[] ecdsaWithSHA384 = {
-      0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x03,
+    0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x03,
   };
   private final byte[] ecdsaWithSHA512 = {
-      0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x04,
+    0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x04,
   };
+
   /**
    * Key usage extension only has digitalSignature but i.e. bit 0 enabled. Rest ofr the 7 buts are
    * unused. Extension SEQUENCE (3 elem) extnID OBJECT IDENTIFIER 2.5.29.15 keyUsage (X.509
    * extension) critical BOOLEAN true extnValue OCTET STRING (4 byte) 03020780 BIT STRING (1 bit) 1
    */
   private final byte[] keyUsage = {
-      0x30, 0x0E, 0x06, 0x03, 0x55, 0x1D, 0x0F, 0x01, 0x01, (byte) 0xFF, 0x04, 0x04,
-      0x03, 0x02, 0x07, (byte) 0x80,
+    0x30,
+    0x0E,
+    0x06,
+    0x03,
+    0x55,
+    0x1D,
+    0x0F,
+    0x01,
+    0x01,
+    (byte) 0xFF,
+    0x04,
+    0x04,
+    0x03,
+    0x02,
+    0x07,
+    (byte) 0x80,
   };
+
   /**
    * [1] (1 elem) SET (1 elem) INTEGER 2 [2] (1 elem) INTEGER 3 [3] (1 elem) INTEGER 256 [5] (1
    * elem) SET (1 elem) INTEGER 4 [10] (1 elem) INTEGER 1 [503] (1 elem) NULL
    */
   private final byte[] credKeyCertExtFixed = {
-      (byte) 0xA1, 0x05, 0x31, 0x03, 0x02, 0x01, 0x02, (byte) 0xA2, 0x03,
-      0x02, 0x01, 0x03, (byte) 0xA3, 0x04, 0x02, 0x02, 0x01, 0x00,
-      (byte) 0xA5, 0x05, 0x31, 0x03, 0x02, 0x01, 0x04, (byte) 0xAA, 0x03,
-      0x02, 0x01, 0x01, (byte) 0xBF, (byte) 0x83, 0x77, 0x02, 0x05, 0x00,
+    (byte) 0xA1,
+    0x05,
+    0x31,
+    0x03,
+    0x02,
+    0x01,
+    0x02,
+    (byte) 0xA2,
+    0x03,
+    0x02,
+    0x01,
+    0x03,
+    (byte) 0xA3,
+    0x04,
+    0x02,
+    0x02,
+    0x01,
+    0x00,
+    (byte) 0xA5,
+    0x05,
+    0x31,
+    0x03,
+    0x02,
+    0x01,
+    0x04,
+    (byte) 0xAA,
+    0x03,
+    0x02,
+    0x01,
+    0x01,
+    (byte) 0xBF,
+    (byte) 0x83,
+    0x77,
+    0x02,
+    0x05,
+    0x00,
   };
+
   /**
    * SEQUENCE (7 elem) [0] (1 elem) INTEGER 2 INTEGER 1 SEQUENCE (1 elem) OBJECT IDENTIFIER
    * 1.2.840.10045.4.3.2 ecdsaWithSHA256 (ANSI X9.62 ECDSA algorithm with SHA256) SEQUENCE (1 elem)
@@ -173,13 +456,72 @@ public class X509CertHandler {
    * Credential Key
    */
   private final byte[] certSigningKeyCommon_1 = {
-      (byte) 0xA0, 0x03, 0x02, 0x01, 0x02, 0x02, 0x01, 0x01, 0x30,
-      0x0A, 0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02, 0x30,
-      0x2A, 0x31, 0x28, 0x30, 0x26, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0C, 0x1F,
-      0x41, 0x6E, 0x64, 0x72, 0x6F, 0x69, 0x64, 0x20, 0x49, 0x64, 0x65, 0x6E,
-      0x74, 0x69, 0x74, 0x79, 0x20, 0x43, 0x72, 0x65, 0x64, 0x65, 0x6E, 0x74,
-      0x69, 0x61, 0x6C, 0x20, 0x4B, 0x65, 0x79,
+    (byte) 0xA0,
+    0x03,
+    0x02,
+    0x01,
+    0x02,
+    0x02,
+    0x01,
+    0x01,
+    0x30,
+    0x0A,
+    0x06,
+    0x08,
+    0x2A,
+    (byte) 0x86,
+    0x48,
+    (byte) 0xCE,
+    0x3D,
+    0x04,
+    0x03,
+    0x02,
+    0x30,
+    0x2A,
+    0x31,
+    0x28,
+    0x30,
+    0x26,
+    0x06,
+    0x03,
+    0x55,
+    0x04,
+    0x03,
+    0x0C,
+    0x1F,
+    0x41,
+    0x6E,
+    0x64,
+    0x72,
+    0x6F,
+    0x69,
+    0x64,
+    0x20,
+    0x49,
+    0x64,
+    0x65,
+    0x6E,
+    0x74,
+    0x69,
+    0x74,
+    0x79,
+    0x20,
+    0x43,
+    0x72,
+    0x65,
+    0x64,
+    0x65,
+    0x6E,
+    0x74,
+    0x69,
+    0x61,
+    0x6C,
+    0x20,
+    0x4B,
+    0x65,
+    0x79,
   };
+
   /**
    * SEQUENCE (1 elem) SET (1 elem) SEQUENCE (2 elem) OBJECT IDENTIFIER 2.5.4.3 commonName (X.520 DN
    * component) X.520 DN component UTF8String Android Identity Credential Authentication Key
@@ -187,39 +529,113 @@ public class X509CertHandler {
    * public key type) OBJECT IDENTIFIER 1.2.840.10045.3.1.7 prime256v1 (ANSI X9.62 named elliptic
    * curve) <followed by BIT STRING containing the public key>
    */
-
   private final byte[] certSigningKeyCommon_2 = {
-      0x30, 0x39, 0x31, 0x37, 0x30, 0x35, 0x06, 0x03, 0x55,
-      0x04, 0x03, 0x0C, 0x2E, 0x41, 0x6E, 0x64, 0x72, 0x6F,
-      0x69, 0x64, 0x20, 0x49, 0x64, 0x65, 0x6E,
-      0x74, 0x69, 0x74, 0x79, 0x20, 0x43, 0x72, 0x65, 0x64,
-      0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C, 0x20,
-      0x41, 0x75, 0x74, 0x68, 0x65, 0x6E, 0x74, 0x69, 0x63,
-      0x61, 0x74, 0x69, 0x6F, 0x6E, 0x20, 0x4B,
-      0x65, 0x79, 0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2A,
-      (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x02, 0x01, 0x06,
-      0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x03, 0x01, 0x07,
+    0x30,
+    0x39,
+    0x31,
+    0x37,
+    0x30,
+    0x35,
+    0x06,
+    0x03,
+    0x55,
+    0x04,
+    0x03,
+    0x0C,
+    0x2E,
+    0x41,
+    0x6E,
+    0x64,
+    0x72,
+    0x6F,
+    0x69,
+    0x64,
+    0x20,
+    0x49,
+    0x64,
+    0x65,
+    0x6E,
+    0x74,
+    0x69,
+    0x74,
+    0x79,
+    0x20,
+    0x43,
+    0x72,
+    0x65,
+    0x64,
+    0x65,
+    0x6E,
+    0x74,
+    0x69,
+    0x61,
+    0x6C,
+    0x20,
+    0x41,
+    0x75,
+    0x74,
+    0x68,
+    0x65,
+    0x6E,
+    0x74,
+    0x69,
+    0x63,
+    0x61,
+    0x74,
+    0x69,
+    0x6F,
+    0x6E,
+    0x20,
+    0x4B,
+    0x65,
+    0x79,
+    0x30,
+    0x59,
+    0x30,
+    0x13,
+    0x06,
+    0x07,
+    0x2A,
+    (byte) 0x86,
+    0x48,
+    (byte) 0xCE,
+    0x3D,
+    0x02,
+    0x01,
+    0x06,
+    0x08,
+    0x2A,
+    (byte) 0x86,
+    0x48,
+    (byte) 0xCE,
+    0x3D,
+    0x03,
+    0x01,
+    0x07,
   };
+
   private final byte[] signingKey_common_name = {
-      0x30, 0x39, 0x31, 0x37, 0x30, 0x35, 0x06, 0x03,
-      0x55, 0x04, 0x03, 0x0C, 0x2E, 0x41, 0x6E, 0x64,
-      0x72, 0x6F, 0x69, 0x64, 0x20, 0x49, 0x64, 0x65,
-      0x6E, 0x74, 0x69, 0x74, 0x79, 0x20, 0x43, 0x72,
-      0x65, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C,
-      0x20, 0x41, 0x75, 0x74, 0x68, 0x65, 0x6E, 0x74,
-      0x69, 0x63, 0x61, 0x74, 0x69, 0x6F, 0x6E, 0x20,
-      0x4B, 0x65, 0x79
+    0x30, 0x39, 0x31, 0x37, 0x30, 0x35, 0x06, 0x03,
+    0x55, 0x04, 0x03, 0x0C, 0x2E, 0x41, 0x6E, 0x64,
+    0x72, 0x6F, 0x69, 0x64, 0x20, 0x49, 0x64, 0x65,
+    0x6E, 0x74, 0x69, 0x74, 0x79, 0x20, 0x43, 0x72,
+    0x65, 0x64, 0x65, 0x6E, 0x74, 0x69, 0x61, 0x6C,
+    0x20, 0x41, 0x75, 0x74, 0x68, 0x65, 0x6E, 0x74,
+    0x69, 0x63, 0x61, 0x74, 0x69, 0x6F, 0x6E, 0x20,
+    0x4B, 0x65, 0x79
   };
+
   /**
    * SEQUENCE (1 elem) OBJECT IDENTIFIER 1.2.840.10045.4.3.2 ecdsaWithSHA256 (ANSI X9.62 ECDSA
    * algorithm with SHA256)
    */
   private final byte[] certSigningKeyCommon_3 = {
-      0x30, 0x0A, 0x06,
-      0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02,
+    0x30, 0x0A, 0x06, 0x08, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x04, 0x03, 0x02,
   };
+
   private final byte[] ecPublicKey = {
-      0x06, 0x07, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x02, 0x01,};
+    0x06, 0x07, 0x2A, (byte) 0x86, 0x48, (byte) 0xCE, 0x3D, 0x02, 0x01,
+  };
 
   /**
    * [1] (1 elem) SET (1 elem) INTEGER 2 [2] (1 elem) INTEGER 3 [3] (1 elem) INTEGER 256 [5] (1
@@ -227,8 +643,8 @@ public class X509CertHandler {
    */
 
   // Following methods are used to create certificates
-  private short pushBytes(byte[] stack, short stackPtr, short stackLen,
-      byte[] buf, short start, short len) {
+  private short pushBytes(
+      byte[] stack, short stackPtr, short stackLen, byte[] buf, short start, short len) {
     stackPtr -= len;
     if (buf != null) {
       Util.arrayCopyNonAtomic(buf, start, stack, stackPtr, len);
@@ -248,8 +664,7 @@ public class X509CertHandler {
   //          Unverified                 (2),
   //          Failed                     (3),
   //      }
-  private short pushRoT(
-      byte[] stack, short stackPtr, short stackLen) {
+  private short pushRoT(byte[] stack, short stackPtr, short stackLen) {
     /*
     short last = stackPtr;
 
@@ -269,42 +684,55 @@ public class X509CertHandler {
     // ... and tag Id
     return pushTagIdHeader(stack, stackPtr, stackLen,(short)704, (short) (last - stackPtr));
      */
-    //TODO change this once ROT params exchange mechanism is clarified.
+    // TODO change this once ROT params exchange mechanism is clarified.
     return pushBytes(stack, stackPtr, stackLen, dummyROT, (short) 0, (short) dummyROT.length);
   }
 
-  private short pushIntegerTag(byte[] stack, short stackPtr, short stackLen,
-      byte[] val, short valStart, short valLen, short tag) {
+  private short pushIntegerTag(
+      byte[] stack,
+      short stackPtr,
+      short stackLen,
+      byte[] val,
+      short valStart,
+      short valLen,
+      short tag) {
     short lastStackPtr = stackPtr;
-    stackPtr = pushInteger(stack, stackPtr, stackLen,
-        val, valStart, valLen);
-    return pushTagIdHeader(stack, stackPtr, stackLen, tag,
-        (short) (lastStackPtr - stackPtr));
+    stackPtr = pushInteger(stack, stackPtr, stackLen, val, valStart, valLen);
+    return pushTagIdHeader(stack, stackPtr, stackLen, tag, (short) (lastStackPtr - stackPtr));
   }
 
-  private short pushBooleanTag(byte[] stack, short stackPtr, short stackLen,
-      byte boolVal, short tag) {
+  private short pushBooleanTag(
+      byte[] stack, short stackPtr, short stackLen, byte boolVal, short tag) {
 
     short lastStackPtr = stackPtr;
     stackPtr = pushBoolean(stack, stackPtr, stackLen, (byte) 1);
-    return pushTagIdHeader(stack, stackPtr, stackLen, tag,
-        (short) (lastStackPtr - stackPtr));
+    return pushTagIdHeader(stack, stackPtr, stackLen, tag, (short) (lastStackPtr - stackPtr));
   }
 
-  private short pushOctetTag(byte[] stack, short stackPtr, short stackLen,
-      byte[] val, short valStart, short valLen, short tag) {
+  private short pushOctetTag(
+      byte[] stack,
+      short stackPtr,
+      short stackLen,
+      byte[] val,
+      short valStart,
+      short valLen,
+      short tag) {
     short lastStackPtr = stackPtr;
-    stackPtr = pushOctetString(stack, stackPtr, stackLen,
-        val, valStart, valLen);
-    return pushTagIdHeader(stack, stackPtr, stackLen, tag,
-        (short) (lastStackPtr - stackPtr));
+    stackPtr = pushOctetString(stack, stackPtr, stackLen, val, valStart, valLen);
+    return pushTagIdHeader(stack, stackPtr, stackLen, tag, (short) (lastStackPtr - stackPtr));
   }
 
-  private short pushHwEnforcedParams(byte[] stack, short stackPtr, short stackLen,
+  private short pushHwEnforcedParams(
+      byte[] stack,
+      short stackPtr,
+      short stackLen,
       boolean testCredential,
-      byte[] osVersion, short osVersionStart, short osVersionLen,
-      byte[] osPatchLevel, short osPatchLevelStart, short osPatchLevelLen
-  ) {
+      byte[] osVersion,
+      short osVersionStart,
+      short osVersionLen,
+      byte[] osPatchLevel,
+      short osPatchLevelStart,
+      short osPatchLevelLen) {
     short lastStackPtr = stackPtr;
     // If this cert is not for test credential then add IDENTITY_CREDENTIAL tag.
     if (!testCredential) {
@@ -313,81 +741,139 @@ public class X509CertHandler {
 
     // os patch level
     if (osPatchLevel != null) {
-      stackPtr = pushIntegerTag(stack, stackPtr, stackLen,
-          osPatchLevel, osPatchLevelStart, osPatchLevelLen, (short) 706);
+      stackPtr =
+          pushIntegerTag(
+              stack,
+              stackPtr,
+              stackLen,
+              osPatchLevel,
+              osPatchLevelStart,
+              osPatchLevelLen,
+              (short) 706);
     }
     // os version
     if (osVersion != null) {
-      stackPtr = pushIntegerTag(stack, stackPtr, stackLen,
-          osVersion, osVersionStart, osVersionLen, (short) 705);
+      stackPtr =
+          pushIntegerTag(
+              stack, stackPtr, stackLen, osVersion, osVersionStart, osVersionLen, (short) 705);
     }
     // Root Of Trust
     stackPtr = pushRoT(stack, stackPtr, stackLen);
 
     // Finally fixed set of parameters
-    stackPtr = pushBytes(stack, stackPtr, stackLen,
-        credKeyCertExtFixed, (short) 0, (short) credKeyCertExtFixed.length);
+    stackPtr =
+        pushBytes(
+            stack,
+            stackPtr,
+            stackLen,
+            credKeyCertExtFixed,
+            (short) 0,
+            (short) credKeyCertExtFixed.length);
     // Then sequence header for HW Params
-    return pushSequenceHeader(stack, stackPtr, stackLen,
-        (short) (lastStackPtr - stackPtr));
+    return pushSequenceHeader(stack, stackPtr, stackLen, (short) (lastStackPtr - stackPtr));
   }
 
-  private short pushSwEnforcedParams(byte[] stack, short stackPtr, short stackLen,
-      byte[] creationDateTime, short creationDateTimeStart, short creationDateTimeLen,
-      byte[] attAppId, short attAppIdStart, short attAppIdLen) {
+  private short pushSwEnforcedParams(
+      byte[] stack,
+      short stackPtr,
+      short stackLen,
+      byte[] creationDateTime,
+      short creationDateTimeStart,
+      short creationDateTimeLen,
+      byte[] attAppId,
+      short attAppIdStart,
+      short attAppIdLen) {
     short lastStackPtr = stackPtr;
     // attestation app id
     if (attAppId != null) {
-      stackPtr = pushOctetTag(stack, stackPtr, stackLen,
-          attAppId, attAppIdStart, attAppIdLen, (short) 709);
+      stackPtr =
+          pushOctetTag(
+              stack, stackPtr, stackLen, attAppId, attAppIdStart, attAppIdLen, (short) 709);
     }
     if (creationDateTime != null) {
-      stackPtr = pushIntegerTag(stack, stackPtr, stackLen,
-          creationDateTime, creationDateTimeStart, creationDateTimeLen, (short) 701);
+      stackPtr =
+          pushIntegerTag(
+              stack,
+              stackPtr,
+              stackLen,
+              creationDateTime,
+              creationDateTimeStart,
+              creationDateTimeLen,
+              (short) 701);
     }
     // Then sequence header for SW Params
-    stackPtr = pushSequenceHeader(stack, stackPtr, stackLen,
-        (short) (lastStackPtr - stackPtr));
+    stackPtr = pushSequenceHeader(stack, stackPtr, stackLen, (short) (lastStackPtr - stackPtr));
     return stackPtr;
   }
 
   // Add the extension
-  private short pushAndroidExtension(byte[] stack, short stackPtr, short stackLen,
-      byte[] osVersion, short osVersionStart, short osVersionLen,
-      byte[] osPatchLevel, short osPatchLevelStart, short osPatchLevelLen,
-      byte[] creationDateTime, short creationDateTimeStart, short creationDateTimeLen,
-      byte[] attAppId, short attAppIdStart, short attAppIdLen,
-      byte[] challenge, short challengeStart, short challengeLen,
+  private short pushAndroidExtension(
+      byte[] stack,
+      short stackPtr,
+      short stackLen,
+      byte[] osVersion,
+      short osVersionStart,
+      short osVersionLen,
+      byte[] osPatchLevel,
+      short osPatchLevelStart,
+      short osPatchLevelLen,
+      byte[] creationDateTime,
+      short creationDateTimeStart,
+      short creationDateTimeLen,
+      byte[] attAppId,
+      short attAppIdStart,
+      short attAppIdLen,
+      byte[] challenge,
+      short challengeStart,
+      short challengeLen,
       boolean testCredential) {
     short lastStackPtr = stackPtr;
     // First hw enforced.
-    stackPtr = pushHwEnforcedParams(stack, stackPtr, stackLen, testCredential,
-        osVersion, osVersionStart, osVersionLen, osPatchLevel, osPatchLevelStart, osPatchLevelLen);
+    stackPtr =
+        pushHwEnforcedParams(
+            stack,
+            stackPtr,
+            stackLen,
+            testCredential,
+            osVersion,
+            osVersionStart,
+            osVersionLen,
+            osPatchLevel,
+            osPatchLevelStart,
+            osPatchLevelLen);
 
     // Now SW enforced
-    stackPtr = pushSwEnforcedParams(stack, stackPtr, stackLen, creationDateTime,
-        creationDateTimeStart, creationDateTimeLen, attAppId, attAppIdStart, attAppIdLen);
+    stackPtr =
+        pushSwEnforcedParams(
+            stack,
+            stackPtr,
+            stackLen,
+            creationDateTime,
+            creationDateTimeStart,
+            creationDateTimeLen,
+            attAppId,
+            attAppIdStart,
+            attAppIdLen);
     // uniqueId is always empty.
     stackPtr = pushOctetStringHeader(stack, stackPtr, stackLen, (short) 0);
     // attest challenge
     if (challenge != null) {
-      stackPtr = pushOctetString(stack, stackPtr, stackLen, challenge, challengeStart,
-          challengeLen);
+      stackPtr =
+          pushOctetString(stack, stackPtr, stackLen, challenge, challengeStart, challengeLen);
     }
 
     // Always strong box enforced
-    //TODO check this out because there is no strongbox involved here - it is SE Enforced.
+    // TODO check this out because there is no strongbox involved here - it is SE Enforced.
     stackPtr = pushEnumerated(stack, stackPtr, stackLen, (byte) 2);
     stackPtr = pushShort(stack, stackPtr, stackLen, KEYMINT_VERSION);
     stackPtr = pushIntegerHeader(stack, stackPtr, stackLen, (short) 2);
     stackPtr = pushEnumerated(stack, stackPtr, stackLen, STRONGBOX);
     stackPtr = pushShort(stack, stackPtr, stackLen, ATTESTATION_VERSION);
     stackPtr = pushIntegerHeader(stack, stackPtr, stackLen, (short) 2);
-    stackPtr = pushSequenceHeader(stack, stackPtr, stackLen,
-        (short) (lastStackPtr - stackPtr));
+    stackPtr = pushSequenceHeader(stack, stackPtr, stackLen, (short) (lastStackPtr - stackPtr));
     stackPtr = pushOctetStringHeader(stack, stackPtr, stackLen, (short) (lastStackPtr - stackPtr));
-    stackPtr = pushBytes(stack, stackPtr, stackLen, androidExtn, (short) 0,
-        (short) androidExtn.length);
+    stackPtr =
+        pushBytes(stack, stackPtr, stackLen, androidExtn, (short) 0, (short) androidExtn.length);
     stackPtr = pushSequenceHeader(stack, stackPtr, stackLen, (short) (lastStackPtr - stackPtr));
     return stackPtr;
   }
@@ -395,8 +881,8 @@ public class X509CertHandler {
   // tag id <= 30 ---> 0xA0 | {tagId}
   // 30 < tagId < 128 ---> 0xBF 0x{tagId}
   // tagId >= 128 ---> 0xBF 0x80+(tagId/128) 0x{tagId - (128*(tagId/128))}
-  private short pushTagIdHeader(byte[] stack, short stackPtr, short stackLen, short tagId,
-      short len) {
+  private short pushTagIdHeader(
+      byte[] stack, short stackPtr, short stackLen, short tagId, short len) {
     stackPtr = pushLength(stack, stackPtr, stackLen, len);
     short count = (short) (tagId / 128);
     if (count > 0) {
@@ -413,8 +899,8 @@ public class X509CertHandler {
 
   // Ignore leading zeros. Only Unsigned Integers are required hence if MSB is set then add 0x00
   // as most significant byte.
-  private short pushInteger(byte[] stack, short stackPtr, short stackLen, byte[] buf,
-      short start, short len) {
+  private short pushInteger(
+      byte[] stack, short stackPtr, short stackLen, byte[] buf, short start, short len) {
     short last = stackPtr;
     byte index = 0;
     while (index < (byte) len) {
@@ -426,8 +912,8 @@ public class X509CertHandler {
     if (index == (byte) len) {
       stackPtr = pushByte(stack, stackPtr, stackLen, (byte) 0x00);
     } else {
-      stackPtr = pushBytes(stack, stackPtr, stackLen, buf, (short) (start + index),
-          (short) (len - index));
+      stackPtr =
+          pushBytes(stack, stackPtr, stackLen, buf, (short) (start + index), (short) (len - index));
       if (buf[(short) (start + index)] < 0) { // MSB is 1
         stackPtr = pushByte(stack, stackPtr, stackLen, (byte) 0x00); // always unsigned int
       }
@@ -440,8 +926,7 @@ public class X509CertHandler {
     return pushByte(stack, stackPtr, stackLen, (byte) 0x02);
   }
 
-  private short pushOctetStringHeader(byte[] stack, short stackPtr, short stackLen,
-      short len) {
+  private short pushOctetStringHeader(byte[] stack, short stackPtr, short stackLen, short len) {
     stackPtr = pushLength(stack, stackPtr, stackLen, len);
     return pushByte(stack, stackPtr, stackLen, (byte) 0x04);
   }
@@ -451,8 +936,8 @@ public class X509CertHandler {
     return pushByte(stack, stackPtr, stackLen, (byte) 0x30);
   }
 
-  private short pushBitStringHeader(byte[] stack, short stackPtr, short stackLen,
-      byte unusedBits, short len) {
+  private short pushBitStringHeader(
+      byte[] stack, short stackPtr, short stackLen, byte unusedBits, short len) {
     stackPtr = pushByte(stack, stackPtr, stackLen, unusedBits);
     stackPtr = pushLength(stack, stackPtr, stackLen, (short) (len + 1)); // 1 extra byte for
     // unused bits byte
@@ -471,18 +956,18 @@ public class X509CertHandler {
     }
   }
 
-  private short pushOctetString(byte[] stack, short stackPtr, short stackLen,
-      byte[] buf, short start, short len) {
+  private short pushOctetString(
+      byte[] stack, short stackPtr, short stackLen, byte[] buf, short start, short len) {
     stackPtr = pushBytes(stack, stackPtr, stackLen, buf, start, len);
     return pushOctetStringHeader(stack, stackPtr, stackLen, len);
   }
 
-  private short pushEnumerated(byte[] stack, short stackPtr, short stackLen,
-      byte val) {
+  private short pushEnumerated(byte[] stack, short stackPtr, short stackLen, byte val) {
     short last = stackPtr;
     stackPtr = pushByte(stack, stackPtr, stackLen, val);
     return pushEnumeratedHeader(stack, stackPtr, stackLen, (short) (last - stackPtr));
   }
+
   // KeyDescription ::= SEQUENCE {
   //         attestationVersion         INTEGER, # Value 200
   //         attestationSecurityLevel   SecurityLevel, # See below
@@ -494,8 +979,7 @@ public class X509CertHandler {
   //         hardwareEnforced           AuthorizationList, # See below
   //     }
 
-  private short pushEnumeratedHeader(byte[] stack, short stackPtr, short stackLen,
-      short len) {
+  private short pushEnumeratedHeader(byte[] stack, short stackPtr, short stackLen, short len) {
     stackPtr = pushLength(stack, stackPtr, stackLen, len);
     return pushByte(stack, stackPtr, stackLen, (byte) 0x0A);
   }
@@ -522,50 +1006,92 @@ public class X509CertHandler {
     return stackPtr;
   }
 
-  private short pushExtensions(byte[] stack, short stackPtr, short stackLen,
-      byte[] osVersion, short osVersionStart, short osVersionLen,
-      byte[] osPatchLevel, short osPatchLevelStart, short osPatchLevelLen,
-      byte[] creationDateTime, short creationDateTimeStart, short creationDateTimeLen,
-      byte[] attAppId, short attAppIdStart, short attAppIdLen,
+  private short pushExtensions(
+      byte[] stack,
+      short stackPtr,
+      short stackLen,
+      byte[] osVersion,
+      short osVersionStart,
+      short osVersionLen,
+      byte[] osPatchLevel,
+      short osPatchLevelStart,
+      short osPatchLevelLen,
+      byte[] creationDateTime,
+      short creationDateTimeStart,
+      short creationDateTimeLen,
+      byte[] attAppId,
+      short attAppIdStart,
+      short attAppIdLen,
       boolean testCredential,
-      byte[] challenge, short challengeStart, short challengeLen) {
+      byte[] challenge,
+      short challengeStart,
+      short challengeLen) {
     short lastStackPtr = stackPtr;
-    stackPtr = pushAndroidExtension(stack, stackPtr, stackLen,
-        osVersion, osVersionStart, osVersionLen,
-        osPatchLevel, osPatchLevelStart, osPatchLevelLen,
-        creationDateTime, creationDateTimeStart, creationDateTimeLen,
-        attAppId, attAppIdStart, attAppIdLen,
-        challenge, challengeStart, challengeLen,
-        testCredential);
+    stackPtr =
+        pushAndroidExtension(
+            stack,
+            stackPtr,
+            stackLen,
+            osVersion,
+            osVersionStart,
+            osVersionLen,
+            osPatchLevel,
+            osPatchLevelStart,
+            osPatchLevelLen,
+            creationDateTime,
+            creationDateTimeStart,
+            creationDateTimeLen,
+            attAppId,
+            attAppIdStart,
+            attAppIdLen,
+            challenge,
+            challengeStart,
+            challengeLen,
+            testCredential);
     // Push KeyUsage extension - the key usage is always the same i.e. sign
     stackPtr = pushBytes(stack, stackPtr, stackLen, keyUsage, (short) 0, (short) keyUsage.length);
     // Now push sequence header for the Extensions
-    stackPtr = pushSequenceHeader(stack, stackPtr, stackLen,
-        (short) (lastStackPtr - stackPtr));
+    stackPtr = pushSequenceHeader(stack, stackPtr, stackLen, (short) (lastStackPtr - stackPtr));
     // Extensions have explicit tag of [3]
     stackPtr = pushLength(stack, stackPtr, stackLen, (short) (lastStackPtr - stackPtr));
     stackPtr = pushByte(stack, stackPtr, stackLen, (byte) 0xA3);
     return stackPtr;
   }
 
-  private short pushPubKey(byte[] stack, short stackPtr, short stackLen,
+  private short pushPubKey(
+      byte[] stack,
+      short stackPtr,
+      short stackLen,
       ECPublicKey credPubKey,
-      byte[] scratch, short scratchStart) {
+      byte[] scratch,
+      short scratchStart) {
     short lastStackPtr = stackPtr;
     short keyLen = credPubKey.getW(scratch, scratchStart);
     stackPtr = pushBytes(stack, stackPtr, stackLen, scratch, scratchStart, keyLen);
     stackPtr = pushBitStringHeader(stack, stackPtr, stackLen, (byte) 0x00, keyLen);
     // push common part 2
-    stackPtr = pushBytes(stack, stackPtr, stackLen, credKeyCertCommon_2, (short) 0,
-        (short) credKeyCertCommon_2.length);
+    stackPtr =
+        pushBytes(
+            stack,
+            stackPtr,
+            stackLen,
+            credKeyCertCommon_2,
+            (short) 0,
+            (short) credKeyCertCommon_2.length);
     stackPtr = pushSequenceHeader(stack, stackPtr, stackLen, (short) (lastStackPtr - stackPtr));
     return stackPtr;
   }
 
-  private short pushValidity(byte[] stack, short stackPtr, short stackLen,
-      byte[] notBefore, short notBeforeStart, short notBeforeLen,
-      byte[] notAfter, short notAfterStart, short notAfterLen
-  ) {
+  private short pushValidity(
+      byte[] stack,
+      short stackPtr,
+      short stackLen,
+      byte[] notBefore,
+      short notBeforeStart,
+      short notBeforeLen,
+      byte[] notAfter,
+      short notAfterStart,
+      short notAfterLen) {
     short lastStackPtr = stackPtr;
     stackPtr = pushBytes(stack, stackPtr, stackLen, notAfter, notAfterStart, notAfterLen);
     stackPtr = pushBytes(stack, stackPtr, stackLen, notBefore, notBeforeStart, notBeforeLen);
@@ -573,51 +1099,98 @@ public class X509CertHandler {
     return stackPtr;
   }
 
-  public short generateCredKeyCert(ECPrivateKey attestKey,
+  public short generateCredKeyCert(
+      ECPrivateKey attestKey,
       SEProvider seProvider,
       ECPublicKey credPubKey,
-      byte[] osVersion, short osVersionStart, short osVersionLen,
-      byte[] osPatchLevel, short osPatchLevelStart, short osPatchLevelLen,
-      byte[] challenge, short challengeStart, short challengeLen,
-      byte[] notBefore, short notBeforeStart, short notBeforeLen,
-      byte[] notAfter, short notAfterStart, short notAfterLen,
-      byte[] creationDateTime, short creationDateTimeStart, short creationDateTimeLen,
-      byte[] attAppId, short attAppIdStart, short attAppIdLen, boolean testCredential,
-      byte[] buf, short start, short len,
-      byte[] scratch, short scratchStart, short scratchLen) {
+      byte[] osVersion,
+      short osVersionStart,
+      short osVersionLen,
+      byte[] osPatchLevel,
+      short osPatchLevelStart,
+      short osPatchLevelLen,
+      byte[] challenge,
+      short challengeStart,
+      short challengeLen,
+      byte[] notBefore,
+      short notBeforeStart,
+      short notBeforeLen,
+      byte[] notAfter,
+      short notAfterStart,
+      short notAfterLen,
+      byte[] creationDateTime,
+      short creationDateTimeStart,
+      short creationDateTimeLen,
+      byte[] attAppId,
+      short attAppIdStart,
+      short attAppIdLen,
+      boolean testCredential,
+      byte[] buf,
+      short start,
+      short len,
+      byte[] scratch,
+      short scratchStart,
+      short scratchLen) {
     short stackPtr = len;
     // reserve space signature place-holder - 74 bytes (ASN.1 encode sequence of two integers,
     // each one 32 bytes long) + 3 bytes for bit string.
     stackPtr -= 76;
     short signatureOffset = stackPtr;
     // push common part 3.
-    stackPtr = pushBytes(buf, stackPtr, len, credKeyCertCommon_3, (short) 0,
-        (short) credKeyCertCommon_3.length);
+    stackPtr =
+        pushBytes(
+            buf, stackPtr, len, credKeyCertCommon_3, (short) 0, (short) credKeyCertCommon_3.length);
     short tbsEnd = stackPtr;
     // push extension
-    stackPtr = pushExtensions(buf, stackPtr, (short) (len - start),
-        osVersion, osVersionStart, osVersionLen,
-        osPatchLevel, osPatchLevelStart, osPatchLevelLen,
-        creationDateTime, creationDateTimeStart, creationDateTimeLen,
-        attAppId, attAppIdStart, attAppIdLen, testCredential,
-        challenge, challengeStart, challengeLen);
-    //push pubkey
+    stackPtr =
+        pushExtensions(
+            buf,
+            stackPtr,
+            (short) (len - start),
+            osVersion,
+            osVersionStart,
+            osVersionLen,
+            osPatchLevel,
+            osPatchLevelStart,
+            osPatchLevelLen,
+            creationDateTime,
+            creationDateTimeStart,
+            creationDateTimeLen,
+            attAppId,
+            attAppIdStart,
+            attAppIdLen,
+            testCredential,
+            challenge,
+            challengeStart,
+            challengeLen);
+    // push pubkey
     stackPtr = pushPubKey(buf, stackPtr, len, credPubKey, scratch, scratchStart);
     // push common name
-    stackPtr = pushBytes(buf, stackPtr, len, credKeyCommonName, (short) 0,
-        (short) credKeyCommonName.length);
-    //push validity period
-    stackPtr = pushValidity(buf, stackPtr, len, notBefore, notBeforeStart, notBeforeLen, notAfter,
-        notAfterStart, notAfterLen);
-    //push common part 1
-    stackPtr = pushBytes(buf, stackPtr, len, credKeyCertCommon_1, (short) 0,
-        (short) credKeyCertCommon_1.length);
+    stackPtr =
+        pushBytes(
+            buf, stackPtr, len, credKeyCommonName, (short) 0, (short) credKeyCommonName.length);
+    // push validity period
+    stackPtr =
+        pushValidity(
+            buf,
+            stackPtr,
+            len,
+            notBefore,
+            notBeforeStart,
+            notBeforeLen,
+            notAfter,
+            notAfterStart,
+            notAfterLen);
+    // push common part 1
+    stackPtr =
+        pushBytes(
+            buf, stackPtr, len, credKeyCertCommon_1, (short) 0, (short) credKeyCertCommon_1.length);
     // push tbs header
     short tbsStart = pushSequenceHeader(buf, stackPtr, len, (short) (tbsEnd - stackPtr));
     // sign the tbs - this is ASN.1 encoded sequence of two integers.
-    short signLen = seProvider.ecSign256(attestKey,
-        buf, tbsStart, (short) (tbsEnd - tbsStart), scratch,
-        (short) 0);
+    short signLen =
+        seProvider.ecSign256(
+            attestKey, buf, tbsStart, (short) (tbsEnd - tbsStart), scratch, (short) 0);
     // now push signature
     short certEnd = stackPtr = (short) (signatureOffset + signLen + 3);
     stackPtr = pushBytes(buf, stackPtr, len, scratch, (short) 0, signLen);
@@ -637,14 +1210,22 @@ public class X509CertHandler {
     return (short) (certEnd - stackPtr);
   }
 
-
   public short generateSigningKeyCert(
       SEProvider seProvider,
-      ECPublicKey signingPubKey, ECPrivateKey attestKey,
-      byte[] notBefore, short notBeforeStart, short notBeforeLen,
-      byte[] notAfter, short notAfterStart, short notAfterLen,
-      byte[] buf, short start, short len,
-      byte[] scratch, short scratchStart, short scratchLen) {
+      ECPublicKey signingPubKey,
+      ECPrivateKey attestKey,
+      byte[] notBefore,
+      short notBeforeStart,
+      short notBeforeLen,
+      byte[] notAfter,
+      short notAfterStart,
+      short notAfterLen,
+      byte[] buf,
+      short start,
+      short len,
+      byte[] scratch,
+      short scratchStart,
+      short scratchLen) {
 
     short stackPtr = (short) (start + len);
     // reserve space signature place-holder - 76 bytes (ASN.1 encode sequence of two integers,
@@ -652,31 +1233,58 @@ public class X509CertHandler {
     stackPtr -= 76;
     short signatureOffset = stackPtr;
     // push common part 3.
-    stackPtr = pushBytes(buf, stackPtr, len, certSigningKeyCommon_3, (short) 0,
-        (short) certSigningKeyCommon_3.length);
+    stackPtr =
+        pushBytes(
+            buf,
+            stackPtr,
+            len,
+            certSigningKeyCommon_3,
+            (short) 0,
+            (short) certSigningKeyCommon_3.length);
     short tbsEnd = stackPtr;
 
-    //push pubkey
+    // push pubkey
     stackPtr = pushPubKey(buf, stackPtr, len, signingPubKey, scratch, scratchStart);
 
     // push common name
-    stackPtr = pushBytes(buf, stackPtr, len, signingKey_common_name, (short) 0,
-        (short) signingKey_common_name.length);
+    stackPtr =
+        pushBytes(
+            buf,
+            stackPtr,
+            len,
+            signingKey_common_name,
+            (short) 0,
+            (short) signingKey_common_name.length);
 
-    //push validity period
-    stackPtr = pushValidity(buf, stackPtr, len, notBefore, notBeforeStart, notBeforeLen, notAfter,
-        notAfterStart, notAfterLen);
+    // push validity period
+    stackPtr =
+        pushValidity(
+            buf,
+            stackPtr,
+            len,
+            notBefore,
+            notBeforeStart,
+            notBeforeLen,
+            notAfter,
+            notAfterStart,
+            notAfterLen);
 
-    //push common part 1
-    stackPtr = pushBytes(buf, stackPtr, len, certSigningKeyCommon_1, (short) 0,
-        (short) certSigningKeyCommon_1.length);
+    // push common part 1
+    stackPtr =
+        pushBytes(
+            buf,
+            stackPtr,
+            len,
+            certSigningKeyCommon_1,
+            (short) 0,
+            (short) certSigningKeyCommon_1.length);
 
     // push tbs header
     short tbsStart = pushSequenceHeader(buf, stackPtr, len, (short) (tbsEnd - stackPtr));
     // sign the tbs - this is ASN.1 encoded sequence of two integers.
-    short signLen = seProvider.ecSign256(attestKey, buf, tbsStart, (short) (tbsEnd - tbsStart),
-        scratch,
-        (short) 0);
+    short signLen =
+        seProvider.ecSign256(
+            attestKey, buf, tbsStart, (short) (tbsEnd - tbsStart), scratch, (short) 0);
     // now push signature
     short certEnd = stackPtr = (short) (signatureOffset + signLen + 3);
     stackPtr = pushBytes(buf, stackPtr, len, scratch, (short) 0, signLen);
@@ -694,7 +1302,6 @@ public class X509CertHandler {
       Util.arrayCopyNonAtomic(buf, stackPtr, buf, start, (short) (certEnd - stackPtr));
     }
     return (short) (certEnd - stackPtr);
-
   }
 
   private boolean matchAlg(byte[] buf, short start, short length, short alg) {
@@ -712,17 +1319,15 @@ public class X509CertHandler {
       default:
         return false;
     }
-    SEProvider.print(buf, start, length);
-    SEProvider.print(dest, (short) 0, length);
-    return length == (short) dest.length &&
-        (Util.arrayCompare(buf, start, dest, (short) 0, (short) dest.length) == (short) 0);
+    return length == (short) dest.length
+        && (Util.arrayCompare(buf, start, dest, (short) 0, (short) dest.length) == (short) 0);
   }
 
   private short readPublicKey(byte[] buf, short tbsStart, short tbsLen, short[] retVal) {
     // public key is 7th field in the tbs cert
     short tbsEnd = getNextTag(buf, tbsStart, tbsLen, retVal);
     // go inside tbs skip till 7th field
-    short end = retVal[3]; //getNextTag(buf, retVal[3], retVal[2], retVal);
+    short end = retVal[3]; // getNextTag(buf, retVal[3], retVal[2], retVal);
     for (short i = 0; i < (short) 7; i++) {
       end = getNextTag(buf, end, tbsEnd, retVal);
     }
@@ -737,8 +1342,7 @@ public class X509CertHandler {
     end = getNextTag(buf, retVal[3], end, retVal);
     short len = (short) (end - retVal[0]);
     if (len != (short) ecPublicKey.length
-        || Util.arrayCompare(buf, retVal[0], ecPublicKey, (short) 0,
-        len) != 0) {
+        || Util.arrayCompare(buf, retVal[0], ecPublicKey, (short) 0, len) != 0) {
       return -1;
     }
     // Now read the bit string. The value will be Bit string will start with byte which counts
@@ -769,11 +1373,16 @@ public class X509CertHandler {
   }
 
   /**
-   * retValues[0] = tagStart; retValues[1] = tag; retValues[2] = tagLen; retValues[3] =
-   * tagValIndex;
+   * retValues[0] = tagStart; retValues[1] = tag; retValues[2] = tagLen; retValues[3] = tagValIndex;
    */
-  private short readSign(byte[] buf, short start, short end, short[] retVal,
-      byte[] scratch, short scratchStart, short scratchLen) {
+  private short readSign(
+      byte[] buf,
+      short start,
+      short end,
+      short[] retVal,
+      byte[] scratch,
+      short scratchStart,
+      short scratchLen) {
     // Now read next tag
     getNextTag(buf, start, (short) (end - start), retVal);
     if (retVal[1] != ASN1_BIT_STRING) {
@@ -816,7 +1425,6 @@ public class X509CertHandler {
 
     short index = Util.arrayCopyNonAtomic(buf, sign_r_start, scratch, scratchStart, sign_r_len);
     index = Util.arrayCopyNonAtomic(buf, sign_s_start, scratch, index, sign_s_len);
-    SEProvider.print(scratch, scratchStart, (short) (index - scratchStart));
     return (short) (index - scratchStart);
   }
 
@@ -825,7 +1433,6 @@ public class X509CertHandler {
 
     // Now read next tag
     short index = getNextTag(buf, start, len, retVal);
-    SEProvider.print(buf, start, (short) (index - start));
     if (retVal[1] != ASN1_SEQUENCE) {
       return -1;
     }
@@ -848,8 +1455,14 @@ public class X509CertHandler {
     return index;
   }
 
-  public boolean decodeCert(byte[] buf, short certStart, short certEnd, short[] retVal,
-      byte[] scratch, short scratchStart, short scratchLen) {
+  public boolean decodeCert(
+      byte[] buf,
+      short certStart,
+      short certEnd,
+      short[] retVal,
+      byte[] scratch,
+      short scratchStart,
+      short scratchLen) {
     short tbsEnd = readTbs(buf, certStart, certEnd, retVal);
     if (tbsEnd < 0) {
       return false;
@@ -860,8 +1473,7 @@ public class X509CertHandler {
       return false;
     }
     short alg = retVal[1];
-    short signLen = readSign(buf, algEnd, certEnd, retVal,
-        scratch, scratchStart, scratchLen);
+    short signLen = readSign(buf, algEnd, certEnd, retVal, scratch, scratchStart, scratchLen);
     short signStart = scratchStart;
     short publicKeyLen = readPublicKey(buf, tbsStart, tbsEnd, retVal);
     short publicKeyStart = retVal[0];
@@ -891,7 +1503,7 @@ public class X509CertHandler {
     }
     if ((buf[index] & 0x1F) != 0x1F) { // 1 byte tag
       retValues[0] = (short) (buf[index] & 0x00FF);
-    } else if ((buf[(short) (index + 1)] & 0x80) == 0) { //2 bytes
+    } else if ((buf[(short) (index + 1)] & 0x80) == 0) { // 2 bytes
       retValues[0] = javacard.framework.Util.getShort(buf, index);
       index++;
     } else { // more than 2 bytes
@@ -997,8 +1609,8 @@ public class X509CertHandler {
    * @return index pointing at start of the next byte following the end of the desired TLV object.
    *     If the tag is not present in the buffer than the FIRASpecs.INVALID_VALUE is returned
    */
-  public short getTag(short tag, byte[] buf, short index, short len, boolean skip,
-      short[] retValues) {
+  public short getTag(
+      short tag, byte[] buf, short index, short len, boolean skip, short[] retValues) {
     if (len == 0) {
       return (short) -1;
     }
@@ -1012,19 +1624,24 @@ public class X509CertHandler {
     return (short) -1;
   }
 
-  public short traverseChain(short parentTag, short tag, byte[] val, short valStart,
+  public short traverseChain(
+      short parentTag,
+      short tag,
+      byte[] val,
+      short valStart,
       short valLen,
-      byte[] mem, short index, short len, short[] retValues) {
+      byte[] mem,
+      short index,
+      short len,
+      short[] retValues) {
     short end = (short) (index + len); // end of the credentials.
     // Read the key sets one by one - index points to beginning of the key set and the end points to
     // end of all the key sets.
-    SEProvider.print(mem, index, len);
     while (index != (short) -1 && index < end) {
       // read the tag
       index = getNextTag(mem, index, (short) (end - index), retValues);
       // Is the tag parent tag or any tag.
-      if (index != (short) -1 &&
-          (parentTag == (short) -1 || parentTag == retValues[1])) {
+      if (index != (short) -1 && (parentTag == (short) -1 || parentTag == retValues[1])) {
         short curParentStart = retValues[0];
         short curParentTag = retValues[1];
         short curParentLen = retValues[2];
@@ -1033,8 +1650,9 @@ public class X509CertHandler {
         // find the tag value in this tag
         short tagEnd = getTag(tag, mem, curParentVal, curParentLen, false, retValues);
         // Compare the returned value with the given value
-        if (tagEnd != (short) -1 && valLen == retValues[2] &&
-            Util.arrayCompare(val, valStart, mem, retValues[3], valLen) == 0) {
+        if (tagEnd != (short) -1
+            && valLen == retValues[2]
+            && Util.arrayCompare(val, valStart, mem, retValues[3], valLen) == 0) {
           retValues[0] = curParentStart;
           retValues[1] = curParentTag;
           retValues[2] = curParentLen;
@@ -1047,8 +1665,12 @@ public class X509CertHandler {
   }
 
   public short convertCoseSign1SignatureToAsn1(
-      byte[] input, short offset, short len,
-      byte[] scratchPad, short scratchPadOff, short scratchLen) {
+      byte[] input,
+      short offset,
+      short len,
+      byte[] scratchPad,
+      short scratchPadOff,
+      short scratchLen) {
     // SEQ [ INTEGER(r), INTEGER(s)]
     // write from bottom to the top
     if (len != 64 && len != 128 && len != 256) {
@@ -1063,8 +1685,8 @@ public class X509CertHandler {
     short dataLen = (short) (len / 2);
 
     // write s.
-    stackPtr = pushInteger(scratchPad, stackPtr, stackLen, input, (short) (offset + dataLen),
-        dataLen);
+    stackPtr =
+        pushInteger(scratchPad, stackPtr, stackLen, input, (short) (offset + dataLen), dataLen);
     // write r
     stackPtr = pushInteger(scratchPad, stackPtr, stackLen, input, offset, dataLen);
     short length = (short) (end - stackPtr);

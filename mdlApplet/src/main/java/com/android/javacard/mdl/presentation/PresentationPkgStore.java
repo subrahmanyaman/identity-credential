@@ -40,8 +40,12 @@ public class PresentationPkgStore implements MdlPresentationPkgStore {
     return mInstance;
   }
 
-  public void configure(SEProvider se, MdlSpecifications mdlSpecs,
-      short maxSlots, byte preAllocatedDocCount, short maxDocumentSize) {
+  public void configure(
+      SEProvider se,
+      MdlSpecifications mdlSpecs,
+      short maxSlots,
+      byte preAllocatedDocCount,
+      short maxDocumentSize) {
     mPackages = new MdocPresentationPkg[maxSlots];
     for (byte i = 0; i < maxSlots; i++) {
       mPackages[i] = new MdocPresentationPkg(se, mdlSpecs);
@@ -91,5 +95,4 @@ public class PresentationPkgStore implements MdlPresentationPkgStore {
   public void commitProvisioning(short slotId) {
     mPackages[slotId].commitProvisioning();
   }
-
 }

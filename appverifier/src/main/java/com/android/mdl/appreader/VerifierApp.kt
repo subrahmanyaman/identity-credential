@@ -5,7 +5,6 @@ import com.android.identity.android.util.AndroidLogPrinter
 import com.android.identity.util.Logger
 import androidx.preference.PreferenceManager
 import com.android.identity.credentialtype.CredentialTypeRepository
-import com.android.identity.credentialtype.knowntypes.DirectAccessDrivingLicense
 import com.android.identity.credentialtype.knowntypes.DrivingLicense
 import com.android.identity.credentialtype.knowntypes.EUPersonalID
 import com.android.identity.credentialtype.knowntypes.VaccinationDocument
@@ -62,7 +61,6 @@ class VerifierApp : Application() {
             trustManagerInstance.addTrustPoint(TrustPoint(it))
         }
         credentialTypeRepositoryInstance = credentialTypeRepository
-        credentialTypeRepositoryInstance.addCredentialType(DirectAccessDrivingLicense.getCredentialType())
         credentialTypeRepositoryInstance.addCredentialType(DrivingLicense.getCredentialType())
         credentialTypeRepositoryInstance.addCredentialType(VehicleRegistration.getCredentialType())
         credentialTypeRepositoryInstance.addCredentialType(VaccinationDocument.getCredentialType())

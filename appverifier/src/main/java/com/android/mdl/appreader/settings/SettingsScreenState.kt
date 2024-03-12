@@ -15,17 +15,12 @@ data class SettingsScreenState(
     val isWifiAwareEnabled: Boolean = false,
     val isNfcTransferEnabled: Boolean = false,
     val isDebugLoggingEnabled: Boolean = true,
-    val readerAuthentication: Int = 0,
-    val directAccessDemoEnabled: Boolean = false
+    val readerAuthentication: Int = 0
 ) {
 
     fun canToggleHttpTransfer(newValue: Boolean): Boolean {
         val updatedState = copy(isHttpTransferEnabled = newValue)
         return updatedState.hasDataRetrievalOn()
-    }
-
-    fun isDirectAccessDemoEnabled(): Boolean {
-        return directAccessDemoEnabled
     }
 
     fun canToggleBleCentralClientMode(newValue: Boolean): Boolean {

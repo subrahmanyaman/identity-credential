@@ -22,9 +22,7 @@ import javacard.framework.ISO7816;
 import javacard.framework.ISOException;
 import javacard.framework.JCSystem;
 
-/**
- * This Class is the base class for CBOREncoder and decoder.
- */
+/** This Class is the base class for CBOREncoder and decoder. */
 public class CBORBase {
 
   // Mask for the major CBOR type
@@ -50,11 +48,10 @@ public class CBORBase {
   // Major type 7: floating-point numbers
   public static final byte TYPE_FLOAT = (byte) (0x07);
 
-  /**
-   * Length information (Integer size, array length, etc.) in low-order 5 bits
-   */
+  /** Length information (Integer size, array length, etc.) in low-order 5 bits */
   // One byte unsigned value (uint8)
   public static final byte ENCODED_ONE_BYTE = 0x18;
+
   // Two byte unsigned value (uint16)
   public static final byte ENCODED_TWO_BYTES = 0x19;
   // Four byte unsigned value (uint32)
@@ -62,11 +59,10 @@ public class CBORBase {
   // Eight byte unsigned value (uint64)
   public static final byte ENCODED_EIGHT_BYTES = 0x1b;
 
-  /**
-   * Values for additional information in major type 7
-   */
+  /** Values for additional information in major type 7 */
   // CBOR encoded boolean - false
   public static final byte ENCODED_FALSE = (byte) 0xF4;
+
   // CBOR encoded boolean - true
   public static final byte ENCODED_TRUE = (byte) 0xF5;
   // CBOR encoded null
@@ -79,7 +75,8 @@ public class CBORBase {
 
   public static final byte INVALID_INPUT = -1;
   public final byte[] DIRECT_ACCESS_PROVISIONING_APPLET_ID = {
-      (byte) 0xA0, 0x00, 0x00, 0x02, 0x48, 0x00, 0x01, 0x01, 0x01};
+    (byte) 0xA0, 0x00, 0x00, 0x02, 0x48, 0x00, 0x01, 0x01, 0x01
+  };
   protected short[] mStatusWords;
   protected byte[] mBuffer;
 
@@ -89,8 +86,11 @@ public class CBORBase {
 
   private byte[] getCurrentApduBuffer() {
     AID aid = JCSystem.getPreviousContextAID();
-    if (aid != null && aid.equals(DIRECT_ACCESS_PROVISIONING_APPLET_ID,
-        (short) 0, (byte) DIRECT_ACCESS_PROVISIONING_APPLET_ID.length)) {
+    if (aid != null
+        && aid.equals(
+            DIRECT_ACCESS_PROVISIONING_APPLET_ID,
+            (short) 0,
+            (byte) DIRECT_ACCESS_PROVISIONING_APPLET_ID.length)) {
       return null;
     }
     // TODO
@@ -103,7 +103,7 @@ public class CBORBase {
    * @param offset Offset in APDU buffer where content should be read
    * @param length Length in the APDU buffer
    */
-  final public void init(short offset, short length) {
+  public final void init(short offset, short length) {
     mBuffer = null;
     mStatusWords[0] = offset;
     mStatusWords[1] = (short) (offset + length);
@@ -117,7 +117,7 @@ public class CBORBase {
    * @param offset Offset in buffer where content should be read/written
    * @param length Length in the APDU buffer
    */
-  final public void init(byte[] buffer, short offset, short length) {
+  public final void init(byte[] buffer, short offset, short length) {
     if (buffer != getCurrentApduBuffer()) { // do not store the APDU buffer
       mBuffer = buffer;
     } else {
@@ -135,7 +135,7 @@ public class CBORBase {
    * @param offset Offset in buffer where content should be read/written
    * @param length Length in the APDU buffer
    */
-  final public void initialize(byte[] buffer, short offset, short length) {
+  public final void initialize(byte[] buffer, short offset, short length) {
     mBuffer = buffer;
     mStatusWords[0] = offset;
     mStatusWords[1] = (short) (offset + length);
@@ -147,33 +147,27 @@ public class CBORBase {
    * @param offset Offset in buffer where content should be read/written
    * @param length Length in the APDU buffer
    */
-  final public void initialize(short offset, short length) {
+  public final void initialize(short offset, short length) {
     mBuffer = null;
     mStatusWords[0] = offset;
     mStatusWords[1] = (short) (offset + length);
   }
 
-  /**
-   * Reset the internal state of the parser
-   */
-  final public void reset() {
+  /** Reset the internal state of the parser */
+  public final void reset() {
     mBuffer = null;
     mStatusWords[0] = 0;
     mStatusWords[1] = 0;
     mStatusWords[2] = 0;
   }
 
-  /**
-   * Returns the current offset within the buffer stream.
-   */
-  final public short getCurrentOffset() {
+  /** Returns the current offset within the buffer stream. */
+  public final short getCurrentOffset() {
     return mStatusWords[0];
   }
 
-  /**
-   * Returns the length of the current buffer stream.
-   */
-  final public short getBufferLength() {
+  /** Returns the length of the current buffer stream. */
+  public final short getBufferLength() {
     return mStatusWords[1];
   }
 
@@ -183,7 +177,7 @@ public class CBORBase {
    * @param inc Value that should be add to the offset
    * @return Current offset value (before increase)
    */
-  final public short getCurrentOffsetAndIncrease(short inc) {
+  public final short getCurrentOffsetAndIncrease(short inc) {
     final short off = mStatusWords[0];
     increaseOffset(inc);
     return off;
@@ -216,7 +210,7 @@ public class CBORBase {
    * @param inc Value that should be added to the offset
    * @return New offset value (after increase)
    */
-  final public short increaseOffset(short inc) {
+  public final short increaseOffset(short inc) {
     if ((short) (getCurrentOffset() + inc) > getBufferLength() || inc < 0) {
       ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
     }

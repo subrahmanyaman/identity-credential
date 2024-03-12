@@ -27,5 +27,4 @@ public interface MdlService extends Shareable {
   byte SERVICE_ID = 1;
 
   short getHandoverSelectMessage(byte[] buf, short start);
-
 }

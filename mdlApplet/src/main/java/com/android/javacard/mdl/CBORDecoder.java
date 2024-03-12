@@ -19,9 +19,7 @@ import javacard.framework.ISO7816;
 import javacard.framework.ISOException;
 import javacard.framework.Util;
 
-/**
- * This class implements CBOR decoder.
- */
+/** This class implements CBOR decoder. */
 public class CBORDecoder extends CBORBase {
 
   /**
@@ -83,18 +81,19 @@ public class CBORDecoder extends CBORBase {
           skipEntry();
         }
         break;
-      case TYPE_TAG: {
-        // We currently onlu check for 0x18 tag.
-        // TODO In future put full tag related support
-        increaseOffset((short) 1);
-        increaseOffset(len);
-        skipEntry();
-      }
-      break;
+      case TYPE_TAG:
+        {
+          // We currently onlu check for 0x18 tag.
+          // TODO In future put full tag related support
+          increaseOffset((short) 1);
+          increaseOffset(len);
+          skipEntry();
+        }
+        break;
       case TYPE_FLOAT:
-        //TODO in future add more simple types.
+        // TODO in future add more simple types.
         short n = (byte) (getRawByte() & ADDINFO_MASK);
-        if (n == 22 || n == 21 || n == 20) { //nil
+        if (n == 22 || n == 21 || n == 20) { // nil
           increaseOffset((short) 1);
         }
         break;
@@ -136,7 +135,6 @@ public class CBORDecoder extends CBORBase {
     return 0; // Never reached
   }
 
-
   /**
    * Read the 16bit integer at the current location (offset will be increased) Note: this function
    * works for positive and negative integers. Sign interpretation needs to be done by the caller.
@@ -156,8 +154,8 @@ public class CBORDecoder extends CBORBase {
   public void readInt32(byte[] output, short offset) {
     final byte addInfo = (byte) (readRawByte() & ADDINFO_MASK);
     if (addInfo == ENCODED_FOUR_BYTES) {
-      Util.arrayCopyNonAtomic(getBuffer(), getCurrentOffsetAndIncrease((short) 4), output,
-          offset, (short) 4);
+      Util.arrayCopyNonAtomic(
+          getBuffer(), getCurrentOffsetAndIncrease((short) 4), output, offset, (short) 4);
     } else {
       ISOException.throwIt(ISO7816.SW_DATA_INVALID);
     }
@@ -166,8 +164,8 @@ public class CBORDecoder extends CBORBase {
   public void readInt64(byte[] output, short offset) {
     final byte addInfo = (byte) (readRawByte() & ADDINFO_MASK);
     if (addInfo == ENCODED_EIGHT_BYTES) {
-      Util.arrayCopyNonAtomic(getBuffer(), getCurrentOffsetAndIncrease((short) 8), output,
-          offset, (short) 8);
+      Util.arrayCopyNonAtomic(
+          getBuffer(), getCurrentOffsetAndIncrease((short) 8), output, offset, (short) 8);
     } else {
       ISOException.throwIt(ISO7816.SW_DATA_INVALID);
     }
@@ -178,8 +176,8 @@ public class CBORDecoder extends CBORBase {
     if (size == 1) { // Check for special case (integer could be encoded in first type)
       output[offset] = readInt8();
     } else {
-      Util.arrayCopyNonAtomic(getBuffer(), getCurrentOffsetAndIncrease((short) (1 + size)), output,
-          offset, size);
+      Util.arrayCopyNonAtomic(
+          getBuffer(), getCurrentOffsetAndIncrease((short) (1 + size)), output, offset, size);
     }
     return (short) (size & 0xFF);
   }
@@ -197,9 +195,7 @@ public class CBORDecoder extends CBORBase {
     return length;
   }
 
-  /**
-   * Reads a boolean at the current location (offset will be increased).
-   */
+  /** Reads a boolean at the current location (offset will be increased). */
   public boolean readBoolean() {
     byte b = readRawByte();
     if (b == ENCODED_TRUE) {
@@ -241,14 +237,14 @@ public class CBORDecoder extends CBORBase {
       ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
     }
 
-    length = (short) (
-        Util.arrayCopyNonAtomic(getBuffer(), getCurrentOffset(), outBuffer, outOffset, length)
-            - outOffset);
+    length =
+        (short)
+            (Util.arrayCopyNonAtomic(getBuffer(), getCurrentOffset(), outBuffer, outOffset, length)
+                - outOffset);
     increaseOffset(length);
 
     return length;
   }
-
 
   /**
    * Read the raw byte at the current buffer location and increase the offset by one.
@@ -258,5 +254,4 @@ public class CBORDecoder extends CBORBase {
   private byte readRawByte() {
     return getBuffer()[mStatusWords[0]++];
   }
-
 }

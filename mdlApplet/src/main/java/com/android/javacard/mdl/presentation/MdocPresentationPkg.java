@@ -37,20 +37,20 @@ import javacard.security.KeyPair;
  */
 public class MdocPresentationPkg {
 
-  public final static short MAX_DATA_ITEMS = (byte) 64;
-  public final static short ELEM_KEY_ID_OFFSET = 0;
-  public final static short ELEM_START_OFFSET = 1;
-  public final static short ELEM_LENGTH_OFFSET = 2;
-  public final static short ELEM_VALUE_START_OFFSET = 3;
-  public final static short ELEM_VALUE_LENGTH_OFFSET = 4;
-  public final static byte ELEM_TABLE_ROW_SIZE = 5;
-  public final static short ELEM_TABLE_SIZE = (short) (MAX_DATA_ITEMS * ELEM_TABLE_ROW_SIZE);
-  public final static byte NS_KEY_ID_OFFSET = 0;
-  public final static byte NS_START_OFFSET = 1;
-  public final static byte NS_END_OFFSET = 2;
-  public final static byte MAX_NS_COUNT = 1;
-  public final static byte NS_TABLE_ROW_SIZE = 3;
-  public final static byte NS_TABLE_SIZE = (byte) (MAX_NS_COUNT * NS_TABLE_ROW_SIZE);
+  public static final short MAX_DATA_ITEMS = (byte) 64;
+  public static final short ELEM_KEY_ID_OFFSET = 0;
+  public static final short ELEM_START_OFFSET = 1;
+  public static final short ELEM_LENGTH_OFFSET = 2;
+  public static final short ELEM_VALUE_START_OFFSET = 3;
+  public static final short ELEM_VALUE_LENGTH_OFFSET = 4;
+  public static final byte ELEM_TABLE_ROW_SIZE = 5;
+  public static final short ELEM_TABLE_SIZE = (short) (MAX_DATA_ITEMS * ELEM_TABLE_ROW_SIZE);
+  public static final byte NS_KEY_ID_OFFSET = 0;
+  public static final byte NS_START_OFFSET = 1;
+  public static final byte NS_END_OFFSET = 2;
+  public static final byte MAX_NS_COUNT = 1;
+  public static final byte NS_TABLE_ROW_SIZE = 3;
+  public static final byte NS_TABLE_SIZE = (byte) (MAX_NS_COUNT * NS_TABLE_ROW_SIZE);
 
   private static short[] mTemp;
   private final KeyPair mAuthKey;
@@ -143,10 +143,30 @@ public class MdocPresentationPkg {
     return -1;
   }
 
+  public short findNsEntry(byte[] buf, short start, short len) {
+    for (byte i = 0; i < mNsTableSize; i += NS_TABLE_ROW_SIZE) {
+      if (Util.arrayCompare(mHeap, mNsTable[i + NS_KEY_ID_OFFSET], buf, start, len) == 0) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  public short findElementEntry(short nsIndex, byte[] buf, short start, short len) {
+    short elemStart = mNsTable[(short) (nsIndex + NS_START_OFFSET)];
+    short elemEnd = (short) (elemStart + mNsTable[(short) (nsIndex + NS_END_OFFSET)]);
+    for (short i = elemStart; i < elemEnd; i += ELEM_TABLE_ROW_SIZE) {
+      if (Util.arrayCompare(mHeap, mElementTable[(short) (i + ELEM_KEY_ID_OFFSET)], buf, start, len)
+          == 0) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
   public short findElementEntry(short nsIndex, short elemId) {
     short elemStart = mNsTable[(short) (nsIndex + NS_START_OFFSET)];
-    short elemEnd =
-        (short) (elemStart + mNsTable[(short) (nsIndex + NS_END_OFFSET)]);
+    short elemEnd = (short) (elemStart + mNsTable[(short) (nsIndex + NS_END_OFFSET)]);
     for (short i = elemStart; i < elemEnd; i += ELEM_TABLE_ROW_SIZE) {
       if (mElementTable[(short) (i + ELEM_KEY_ID_OFFSET)] == elemId) {
         return i;
@@ -177,8 +197,7 @@ public class MdocPresentationPkg {
     mHeapIndex += len;
   }
 
-  public short read(byte[] buf, short start, short len, short ns, short elem,
-      short elemDataPtr) {
+  public short read(byte[] buf, short start, short len, short ns, short elem, short elemDataPtr) {
     ns = (short) (ns * NS_TABLE_ROW_SIZE);
     if (ns >= mNsTableSize) {
       return 0;
@@ -187,8 +206,11 @@ public class MdocPresentationPkg {
     if (elem >= mElementTableSize) {
       return 0;
     }
-    short remainingBytes = (short) (mElementTable[(short) (elem + ELEM_START_OFFSET)] +
-        mElementTable[(short) (elem + ELEM_LENGTH_OFFSET)] - elemDataPtr);
+    short remainingBytes =
+        (short)
+            (mElementTable[(short) (elem + ELEM_START_OFFSET)]
+                + mElementTable[(short) (elem + ELEM_LENGTH_OFFSET)]
+                - elemDataPtr);
     if (remainingBytes > len) {
       remainingBytes = len;
     }
@@ -200,9 +222,9 @@ public class MdocPresentationPkg {
    * KEY_DOC_TYPE, CBOR_TEXT_STR, KEY_DIGEST_MAPPING, CBOR_MAP, KEY_ISSUER_AUTH, CBOR_ARRAY,
    * KEY_READER_ACCESS, CBOR_MAP,
    *
-   * First parse the cred data and extract digest mapping. Then parse the digest mapping and extract
-   * the name space keys. Then for each namespace parse the array of the items. Finally store each
-   * item in the element index table.
+   * <p>First parse the cred data and extract digest mapping. Then parse the digest mapping and
+   * extract the name space keys. Then for each namespace parse the array of the items. Finally
+   * store each item in the element index table.
    */
   public void enumerate(short[] temp) {
     // Parse the auth keys and cred data
@@ -215,19 +237,20 @@ public class MdocPresentationPkg {
     if (size != (short) (KeyBuilder.LENGTH_EC_FP_256 / 8)) {
       ISOException.throwIt(ISO7816.SW_DATA_INVALID);
     }
+
     ((ECPrivateKey) mAuthKey.getPrivate()).setS(mHeap, mDecoder.getCurrentOffset(), size);
     mDecoder.increaseOffset(size);
     // Now Parse the cred data.
     size = mDecoder.readMajorType(CBORBase.TYPE_BYTE_STRING);
-    short[] struct =
-        mMdlSpecifications.getStructure(MdlSpecifications.KEY_CRED_DATA);
+    short[] struct = mMdlSpecifications.getStructure(MdlSpecifications.KEY_CRED_DATA);
     mMdlSpecifications.decodeStructure(struct, temp, mHeap, mDecoder.getCurrentOffset(), size);
     // Doc types should match
-    if (!mMdlSpecifications.compareDocTypes(MdlSpecifications.KEY_MDL_DOC_TYPE, mHeap, temp[0],
-        temp[1])) {
+    if (!mMdlSpecifications.compareDocTypes(
+        MdlSpecifications.KEY_MDL_DOC_TYPE, mHeap, temp[0], temp[1])) {
       delete();
       ISOException.throwIt(ISO7816.SW_DATA_INVALID);
     }
+
     mDocTypeStart = temp[0];
     mDocTypeLen = temp[1];
     mDigestMappingStart = temp[2];
@@ -236,33 +259,25 @@ public class MdocPresentationPkg {
     mIssuerAuthLength = temp[5];
     mReaderAccessKeysStart = temp[6];
     mReaderAccessKeysLen = temp[7];
-    // Parse the digest mapping
-    struct =
-        mMdlSpecifications.getStructure(MdlSpecifications.IND_CRED_DATA_DIGEST_MAPPING);
-    mMdlSpecifications.decodeStructure(struct, temp, mHeap, mDigestMappingStart,
-        mDigestMappingLength);
-    // For each name space found in the digest mapping
-    for (byte i = 0; i < (short) (struct.length); i += MdlSpecifications.STRUCT_ROW_SIZE) {
-      // Check if there is name space found
-      if (temp[i] == 0) {
-        continue;
-      }
-      // Is this namespace already present in the ns table
-      short nsKey = mMdlSpecifications.NAMESPACES[(short) (i / MdlSpecifications.STRUCT_ROW_SIZE)];
-      if (findNsEntry(nsKey) != -1) {
-        ISOException.throwIt(ISO7816.SW_DATA_INVALID);
-      }
-      // Store the namespace in nsTable
-      mNsTable[mNsTableSize++] = nsKey;
-      mNsTable[mNsTableSize++] = temp[i];
-      mNsTable[mNsTableSize++] = temp[(short) (i + 1)];
+
+    // The digest mapping is a map of namespaces - each of which is an array of 4 elements.
+    mDecoder.init(mHeap, mDigestMappingStart, mDigestMappingLength);
+    short nsCount = mDecoder.readMajorType(CBORBase.TYPE_MAP);
+    // For each key-value entry in the map.
+    for (byte i = 0; i < nsCount; i++) {
+      // record the start of namespace key string
+      mNsTable[mNsTableSize++] = mDecoder.getCurrentOffset();
+      // skip the key - returns to start of array value
+      mNsTable[mNsTableSize++] = mDecoder.skipEntry();
+      // skip the array - returns to end of the array
+      mNsTable[mNsTableSize++] = mDecoder.skipEntry();
     }
+
     // Now for every entry in Ns Table enumerate the elements
     struct = mMdlSpecifications.getStructure(MdlSpecifications.IND_ISSUER_SIGNED_ITEM);
     for (byte i = 0; i < mNsTableSize; i += NS_TABLE_ROW_SIZE) {
-      short[] nsStruct = mMdlSpecifications.getNsStructure(mNsTable[i]);
       short nsStart = mNsTable[(short) (i + 1)];
-      short nsLen = mNsTable[(short) (i + 2)];
+      short nsLen = (short) (mNsTable[(short) (i + 2)] - nsStart);
       mNsTable[(short) (i + 1)] = mElementTableSize;
       mDecoder.init(mHeap, nsStart, nsLen);
       short items = mDecoder.readMajorType(CBORBase.TYPE_ARRAY);
@@ -275,12 +290,7 @@ public class MdocPresentationPkg {
           ISOException.throwIt(ISO7816.SW_DATA_INVALID);
         }
 
-        short elemKey = mMdlSpecifications.getNsElemKey(mNsTable[i], nsStruct, mHeap, temp[4]);
-        if (elemKey == -1) {
-          ISOException.throwIt(ISO7816.SW_DATA_INVALID);
-        }
-
-        mElementTable[mElementTableSize++] = elemKey;
+        mElementTable[mElementTableSize++] = temp[4];
         mElementTable[mElementTableSize++] = start;
         mElementTable[mElementTableSize++] = (short) (end - start);
         mElementTable[mElementTableSize++] = temp[6];
@@ -306,9 +316,12 @@ public class MdocPresentationPkg {
 
   public void delete() {
     mHeapIndex = 0;
-    mDigestMappingStart = mDocTypeStart = mIssuerAuthStart =
-        mReaderAccessKeysStart = mReaderAccessKeysLen = mDigestMappingLength =
-            mIssuerAuthLength = mDocTypeLen = -1;
+    mDigestMappingStart =
+        mDocTypeStart =
+            mIssuerAuthStart =
+                mReaderAccessKeysStart =
+                    mReaderAccessKeysLen =
+                        mDigestMappingLength = mIssuerAuthLength = mDocTypeLen = -1;
     mElementTableSize = mNsTableSize = 0;
     freeMem();
   }
@@ -328,8 +341,8 @@ public class MdocPresentationPkg {
   }
 
   public boolean isMatching(byte[] buf, short start, short len) {
-    return len == mDocTypeLen &&
-        Util.arrayCompare(buf, start, mHeap, mDocTypeStart, mDocTypeLen) == 0;
+    return len == mDocTypeLen
+        && Util.arrayCompare(buf, start, mHeap, mDocTypeStart, mDocTypeLen) == 0;
   }
 
   public boolean isReaderAuthRequired() {
@@ -346,14 +359,11 @@ public class MdocPresentationPkg {
   public boolean isMatchingReaderAuthKey(byte[] buf, short start, short len) {
     try {
       mDecoder.init(mHeap, mReaderAccessKeysStart, mReaderAccessKeysLen);
-      SEProvider.print(mHeap, mReaderAccessKeysStart, mReaderAccessKeysLen);
       short count = mDecoder.readMajorType(CBORBase.TYPE_ARRAY);
       for (short i = 0; i < count; i++) {
         short keyLen = mDecoder.readMajorType(CBORBase.TYPE_BYTE_STRING);
         short keyStart = mDecoder.getCurrentOffset();
-        SEProvider.print(mHeap, keyStart, keyLen);
-        if (len == keyLen &&
-            Util.arrayCompare(buf, start, mHeap, keyStart, len) == 0) {
+        if (len == keyLen && Util.arrayCompare(buf, start, mHeap, keyStart, len) == 0) {
           return true;
         }
         mDecoder.increaseOffset(keyLen);
@@ -362,5 +372,21 @@ public class MdocPresentationPkg {
       return false;
     }
     return false;
+  }
+
+  public short getElementStart(short elemIndex) {
+    return mElementTable[(short) (elemIndex + MdocPresentationPkg.ELEM_START_OFFSET)];
+  }
+
+  public short getElementLen(short elemIndex) {
+    return mElementTable[(short) (elemIndex + MdocPresentationPkg.ELEM_LENGTH_OFFSET)];
+  }
+
+  public short getNsId(short nsIndex, byte[] buf, short start) {
+    short offset = mNsTable[(short) (nsIndex + NS_KEY_ID_OFFSET)];
+    mDecoder.init(mHeap, offset, (short) (mHeap.length - offset));
+    short len = (short) (mDecoder.skipEntry() - offset);
+    Util.arrayCopyNonAtomic(mHeap, offset, buf, start, len);
+    return len;
   }
 }

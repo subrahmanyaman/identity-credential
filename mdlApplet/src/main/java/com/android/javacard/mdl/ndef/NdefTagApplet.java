@@ -41,10 +41,12 @@ import javacardx.apdu.ExtendedLength;
 public class NdefTagApplet extends Applet implements ExtendedLength {
 
   public static final byte[] AID_NDEF_TAG_APPLET = {
-      (byte) 0xD2, 0x76, 0x00, 0x00, (byte) 0x85, 0x01, 0x01};
+    (byte) 0xD2, 0x76, 0x00, 0x00, (byte) 0x85, 0x01, 0x01
+  };
 
   public static final byte[] AID_MDL_DIRECT_ACCESS_APPLET = {
-      (byte) 0xA0, 0x00, 0x00, 0x02, 0x48, 0x04, 0x00};
+    (byte) 0xA0, 0x00, 0x00, 0x02, 0x48, 0x04, 0x00
+  };
 
   static final short MAX_NDEF_DATA_FILE_SIZE = 1024;
   static final short STATUS_WORD_END_OF_FILE_REACHED = 0x6282;
@@ -55,23 +57,30 @@ public class NdefTagApplet extends Applet implements ExtendedLength {
 
   // Hardcoded Capability Container files that points to read only NDEF Data File.
   static final byte[] CAPS_CONTAINER = {
-      (byte) 0x00, (byte) 0x0F,  // size of capability container '00 0F' = 15 bytes
-      (byte) 0x20,               // mapping version v2.0
-      (byte) 0x7F, (byte) 0xFF,  // maximum response data length '7F FF'
-      (byte) 0x7F, (byte) 0xFF,  // maximum command data length '7F FF'
-      (byte) 0x04, (byte) 0x06,  // NDEF File Control TLV
-      (byte) 0xE1, (byte) 0x04,  // NDEF file identifier 'E1 04'
-      (byte) 0x7F, (byte) 0xFF,  // maximum NDEF file size '7F FF'
-      (byte) 0x00,               // file read access condition (allow read)
-      (byte) 0xFF                // file write access condition (do not write)
+    (byte) 0x00,
+    (byte) 0x0F, // size of capability container '00 0F' = 15 bytes
+    (byte) 0x20, // mapping version v2.0
+    (byte) 0x7F,
+    (byte) 0xFF, // maximum response data length '7F FF'
+    (byte) 0x7F,
+    (byte) 0xFF, // maximum command data length '7F FF'
+    (byte) 0x04,
+    (byte) 0x06, // NDEF File Control TLV
+    (byte) 0xE1,
+    (byte) 0x04, // NDEF file identifier 'E1 04'
+    (byte) 0x7F,
+    (byte) 0xFF, // maximum NDEF file size '7F FF'
+    (byte) 0x00, // file read access condition (allow read)
+    (byte) 0xFF // file write access condition (do not write)
   };
   private final short[] mSelectedFile;
   private final byte[] mNdefDataFile;
   private final AID mAid;
 
   public NdefTagApplet() {
-    mAid = new AID(AID_MDL_DIRECT_ACCESS_APPLET, (short) 0,
-        (byte) AID_MDL_DIRECT_ACCESS_APPLET.length);
+    mAid =
+        new AID(
+            AID_MDL_DIRECT_ACCESS_APPLET, (short) 0, (byte) AID_MDL_DIRECT_ACCESS_APPLET.length);
 
     mNdefDataFile =
         JCSystem.makeTransientByteArray(MAX_NDEF_DATA_FILE_SIZE, JCSystem.CLEAR_ON_DESELECT);
@@ -110,7 +119,6 @@ public class NdefTagApplet extends Applet implements ExtendedLength {
     }
   }
 
-
   private void processSelect(APDU apdu) {
     byte[] buf = apdu.getBuffer();
     if (buf[ISO7816.OFFSET_P1] != (byte) 0x00 && buf[ISO7816.OFFSET_P2] != (byte) 0x0C) {
@@ -129,8 +137,8 @@ public class NdefTagApplet extends Applet implements ExtendedLength {
         // Current design enforces new session specific NDEF Data everytime NDEF Tag Applet is
         // selected. Everytime Ndef File is selected new device Engagement data must be generated
         // and hence new Ndef data file needs to be generated.
-        MdlService mdl = (MdlService) JCSystem.getAppletShareableInterfaceObject(mAid,
-            MdlService.SERVICE_ID);
+        MdlService mdl =
+            (MdlService) JCSystem.getAppletShareableInterfaceObject(mAid, MdlService.SERVICE_ID);
         short payloadLength = mdl.getHandoverSelectMessage(buf, (short) 0);
         Util.arrayCopyNonAtomic(buf, (short) 0, mNdefDataFile, (short) 2, payloadLength);
         Util.setShort(mNdefDataFile, (short) 0, payloadLength);

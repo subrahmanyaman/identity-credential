@@ -46,8 +46,8 @@ public class Session {
   static final byte HANDOVER_MSG_LEN = 2;
   static final byte DEVICE_ENGAGEMENT_START = 4;
   static final byte DEVICE_ENGAGEMENT_LEN = 6;
-  final static byte BUF_LENGTH_OFFSET = 16;
-  final static byte SALT_LEN = 32;
+  static final byte BUF_LENGTH_OFFSET = 16;
+  static final byte SALT_LEN = 32;
   // Reader Encoded Bytes - COSE key size + 4 bytes for semantic tag and binary str tags + 2
   // bytes of len field
   static final short READER_ENC_KEY_BYTES_BUF_SIZE = 81;
@@ -77,8 +77,9 @@ public class Session {
   MdlSpecifications mMdlSpecifications;
 
   public Session(SEProvider se, MdlSpecifications mdlSpecs) {
-    mBuffer = JCSystem.makeTransientByteArray((short) (BUF_LENGTH_OFFSET + 1),
-        JCSystem.CLEAR_ON_DESELECT);
+    mBuffer =
+        JCSystem.makeTransientByteArray(
+            (short) (BUF_LENGTH_OFFSET + 1), JCSystem.CLEAR_ON_DESELECT);
     mSEProvider = se;
     mMdlSpecifications = mdlSpecs;
     mDecoder = new CBORDecoder();
@@ -86,47 +87,56 @@ public class Session {
     mStructure = JCSystem.makeTransientShortArray((short) 32, JCSystem.CLEAR_ON_DESELECT);
     mECp256DeviceKeys = new KeyPair(KeyPair.ALG_EC_FP, KeyBuilder.LENGTH_EC_FP_256);
     mSEProvider.initECKey(mECp256DeviceKeys);
-    mHandover = JCSystem.makeTransientByteArray(MAX_HANDOVER_MSG_SIZE,
-        JCSystem.CLEAR_ON_RESET);
-    mReaderEncodedKeyBytes = JCSystem.makeTransientByteArray(READER_ENC_KEY_BYTES_BUF_SIZE,
-        JCSystem.CLEAR_ON_DESELECT);
-    mDevicePrivateKey = (ECPrivateKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_EC_FP_PRIVATE,
-        KeyBuilder.LENGTH_EC_FP_256, false);
+    mHandover = JCSystem.makeTransientByteArray(MAX_HANDOVER_MSG_SIZE, JCSystem.CLEAR_ON_RESET);
+    mReaderEncodedKeyBytes =
+        JCSystem.makeTransientByteArray(READER_ENC_KEY_BYTES_BUF_SIZE, JCSystem.CLEAR_ON_DESELECT);
+    mDevicePrivateKey =
+        (ECPrivateKey)
+            KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PRIVATE, KeyBuilder.LENGTH_EC_FP_256, false);
 
-    //TODO for JCOP we can replace the following with transient memory using alternative buildKey
+    // TODO for JCOP we can replace the following with transient memory using alternative buildKey
     // method.
-    mDeviceKey = (AESKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_256, false);
-    mReaderKey = (AESKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_256, false);
-    mHmacKey = (HMACKey) KeyBuilder.buildKey(KeyBuilder.TYPE_HMAC_TRANSIENT_RESET,
-        (short) 512, false);
-    mEReaderKeyPub = (ECPublicKey) KeyBuilder.buildKey(
-        KeyBuilder.TYPE_EC_FP_PUBLIC,
-        KeyBuilder.LENGTH_EC_FP_256, false);
+    mDeviceKey =
+        (AESKey)
+            KeyBuilder.buildKey(
+                KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_256, false);
+    mReaderKey =
+        (AESKey)
+            KeyBuilder.buildKey(
+                KeyBuilder.TYPE_AES_TRANSIENT_DESELECT, KeyBuilder.LENGTH_AES_256, false);
+    mHmacKey =
+        (HMACKey) KeyBuilder.buildKey(KeyBuilder.TYPE_HMAC_TRANSIENT_RESET, (short) 512, false);
+    mEReaderKeyPub =
+        (ECPublicKey)
+            KeyBuilder.buildKey(KeyBuilder.TYPE_EC_FP_PUBLIC, KeyBuilder.LENGTH_EC_FP_256, false);
     mSEProvider.initEcPublicKey(mEReaderKeyPub);
-    mSessionTranscriptBytes = JCSystem.makeTransientByteArray(
-        MdlSpecifications.MAX_SESSION_TRANSCRIPT_SIZE,
-        JCSystem.CLEAR_ON_DESELECT);
+    mSessionTranscriptBytes =
+        JCSystem.makeTransientByteArray(
+            MdlSpecifications.MAX_SESSION_TRANSCRIPT_SIZE, JCSystem.CLEAR_ON_DESELECT);
     mHmacSigner = Signature.getInstance(Signature.ALG_HMAC_SHA_256, false);
     mKeyAgreement = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH_PLAIN, false);
     mSalt = JCSystem.makeTransientByteArray(SALT_LEN, JCSystem.CLEAR_ON_DESELECT);
   }
 
   public void reset() {
-    Util.arrayFillNonAtomic(mSessionTranscriptBytes, (short) 0,
-        MdlSpecifications.MAX_SESSION_TRANSCRIPT_SIZE, (byte) 0);
-    //TODO reset keys
+    Util.arrayFillNonAtomic(
+        mSessionTranscriptBytes,
+        (short) 0,
+        MdlSpecifications.MAX_SESSION_TRANSCRIPT_SIZE,
+        (byte) 0);
+    // TODO reset keys
   }
 
   private void readerKey(byte[] scratchPad, short scratchOffset, short scratchLen) {
-    //SEProvider.print(mReaderEncodedKeyBytes, (short) 2, Util.getShort(mReaderEncodedKeyBytes,
+    // SEProvider.print(mReaderEncodedKeyBytes, (short) 2, Util.getShort(mReaderEncodedKeyBytes,
     //    (short) 0));
-    short offset = coseKey(
-        mReaderEncodedKeyBytes, (short) 2,
-        Util.getShort(mReaderEncodedKeyBytes, (short) 0),
-        MdlSpecifications.KEY_EREADER_KEY, mStructure);
+    short offset =
+        coseKey(
+            mReaderEncodedKeyBytes,
+            (short) 2,
+            Util.getShort(mReaderEncodedKeyBytes, (short) 0),
+            MdlSpecifications.KEY_EREADER_KEY,
+            mStructure);
     short xCordOffset = mStructure[4];
     short xCordLen = mStructure[5];
     short yCordOffset = mStructure[6];
@@ -137,12 +147,10 @@ public class Session {
     }
     offset = scratchOffset;
     scratchPad[offset++] = (byte) 0x04;
-    offset += copyByteString(mReaderEncodedKeyBytes, xCordOffset, xCordLen, scratchPad,
-        offset);
-    offset += copyByteString(mReaderEncodedKeyBytes, yCordOffset, yCordLen, scratchPad,
-        offset);
+    offset += copyByteString(mReaderEncodedKeyBytes, xCordOffset, xCordLen, scratchPad, offset);
+    offset += copyByteString(mReaderEncodedKeyBytes, yCordOffset, yCordLen, scratchPad, offset);
 
-    //SEProvider.print(scratchPad, scratchOffset, (short) (offset - scratchOffset));
+    // SEProvider.print(scratchPad, scratchOffset, (short) (offset - scratchOffset));
     mEReaderKeyPub.clearKey();
     mEReaderKeyPub.setW(scratchPad, scratchOffset, (short) (offset - scratchOffset));
   }
@@ -170,97 +178,93 @@ public class Session {
       short secretStart = scratchOff;
       short secretLen = 0;
       short outStart = (short) (secretStart + 32);
-      short outLen = 0;
       short pubStart = (short) (outStart + 32);
       short pubLen = 0;
       Util.arrayFillNonAtomic(scratchPad, scratchOff, (short) 256, (byte) 0);
       // Generate salt
-      saltLen = messageDigestSha256(mSessionTranscriptBytes, (short) 2,
-          Util.getShort(mSessionTranscriptBytes, (short) 0),
-          mSalt, (short) 0);
+      saltLen =
+          messageDigestSha256(
+              mSessionTranscriptBytes,
+              (short) 2,
+              Util.getShort(mSessionTranscriptBytes, (short) 0),
+              mSalt,
+              (short) 0);
       if (saltLen != SALT_LEN) {
         ISOException.throwIt(ISO7816.SW_UNKNOWN);
       }
-      //System.out.println("Device Side Salt:");
-      SEProvider.print(mSalt, (short) 0, saltLen);
 
       // Derive shared secret, that will be used for both SKReader and SKDevice derivations
       mKeyAgreement.init(mECp256DeviceKeys.getPrivate());
       pubLen = mEReaderKeyPub.getW(scratchPad, pubStart);
-      secretLen = mKeyAgreement.generateSecret(scratchPad, pubStart, pubLen, scratchPad,
-          secretStart);
-
-      //System.out.println("Device Side ECDH Secret:");
-      SEProvider.print(scratchPad, secretStart, secretLen);
-
-      //System.out.println("Device HKDF ---------------------");
-      SEProvider.print(mSalt, (short) 0, saltLen);
-      SEProvider.print(scratchPad, secretStart, secretLen);
-      SEProvider.print(mMdlSpecifications.deviceSecretInfo, (short) 0,
-          (short) mMdlSpecifications.deviceSecretInfo.length);
-      //System.out.println("---------------------------------");
-
+      secretLen =
+          mKeyAgreement.generateSecret(scratchPad, pubStart, pubLen, scratchPad, secretStart);
       // Derive SKDevice and SKReader using hkdf.
-      outLen = hkdf(scratchPad, secretStart, secretLen,
-          mMdlSpecifications.deviceSecretInfo, scratchPad, outStart);
-
-      //System.out.println("Device Side Device Symmetric Key:");
-      SEProvider.print(scratchPad, outStart, outLen);
+      hkdf(
+          scratchPad,
+          secretStart,
+          secretLen,
+          mMdlSpecifications.deviceSecretInfo,
+          scratchPad,
+          outStart);
       mDeviceKey.setKey(scratchPad, outStart);
-
-      outLen = hkdf(scratchPad, secretStart, secretLen,
-          mMdlSpecifications.readerSecretInfo, scratchPad, outStart);
-      //System.out.println("Device Side Reader Symmetric Key:");
-      SEProvider.print(scratchPad, outStart, outLen);
+      hkdf(
+          scratchPad,
+          secretStart,
+          secretLen,
+          mMdlSpecifications.readerSecretInfo,
+          scratchPad,
+          outStart);
       mReaderKey.setKey(scratchPad, outStart);
-
-      // Now this signer is used to generate the device auth digest and signature.
-      //generateDetachedDeviceAuth(
-      //    mSessionTranscript, (short) 2, Util.getShort(mSessionTranscript, (short) 0),
-      //   mHmacSigner, scratchPad, scratchOff);
-      // At this stage signer has digested session specific data. Further same signer is used to
-      // digest data elements in device response.
-
     } catch (Exception exp) {
       ISOException.throwIt(ISO7816.SW_UNKNOWN);
     }
     return mHmacSigner;
   }
 
-  public short hkdf(byte[] secret, short secretStart, short secretLen,
-      byte[] info, byte[] out, short outStart) {
-    return hkdf(mSalt, (short) 0, (short) mSalt.length,
-        secret, secretStart, secretLen, info, out, outStart);
+  public short hkdf(
+      byte[] secret, short secretStart, short secretLen, byte[] info, byte[] out, short outStart) {
+    return hkdf(
+        mSalt,
+        (short) 0,
+        (short) mSalt.length,
+        secret,
+        secretStart,
+        secretLen,
+        info,
+        out,
+        outStart);
   }
 
-  public short hkdf(byte[] salt, short saltStart, short saltLen,
-      byte[] secret, short secretStart, short secretLen,
-      byte[] info, byte[] out, short outStart) {
+  public short hkdf(
+      byte[] salt,
+      short saltStart,
+      short saltLen,
+      byte[] secret,
+      short secretStart,
+      short secretLen,
+      byte[] info,
+      byte[] out,
+      short outStart) {
     mHmacKey.setKey(salt, saltStart, saltLen);
     mHmacSigner.init(mHmacKey, Signature.MODE_SIGN);
     short outLen = mHmacSigner.sign(secret, secretStart, secretLen, out, outStart);
-    SEProvider.print(out, outStart, outLen);
     // Now expand the prk. In out case N = L/DigestLEn = 32/32 = 1. Thus, we have only one
     // iteration i.e. T[1] = T[0] || info || counter, where T[0] is zero length.
     mHmacKey.setKey(out, outStart, outLen);
     mHmacSigner.init(mHmacKey, Signature.MODE_SIGN);
     // derive device key
-    mHmacSigner.update(
-        info, (short) 0,
-        (short) info.length);
+    mHmacSigner.update(info, (short) 0, (short) info.length);
     out[outStart] = (byte) 1;
     outLen = mHmacSigner.sign(out, outStart, (byte) 1, out, outStart);
     return outLen;
   }
 
-  public short messageDigestSha256(byte[] input, short inputStart, short inputLen,
-      byte[] out,
-      short outStart) {
+  public short messageDigestSha256(
+      byte[] input, short inputStart, short inputLen, byte[] out, short outStart) {
     MessageDigest mDigest = null;
     short len = 0;
     try {
-      mDigest = MessageDigest.getInitializedMessageDigestInstance(MessageDigest.ALG_SHA_256,
-          false);
+      mDigest = MessageDigest.getInitializedMessageDigestInstance(MessageDigest.ALG_SHA_256, false);
       len = mDigest.doFinal(input, inputStart, inputLen, out, outStart);
     } catch (Exception e) {
       ISOException.throwIt(ISO7816.SW_UNKNOWN);
@@ -290,8 +294,8 @@ public class Session {
    *  DeviceEngagementBytes = #6.24(bstr .cbor DeviceEngagement in handoverSelectMsg)
    *  EReaderKeyBytes = encodedReaderKeyBytes
    */
-  private void encodeSessionTranscript(byte[] sessionTranscript, byte[] handoverSelectMsg,
-      byte[] encodedReaderKeyBytes) {
+  private void encodeSessionTranscript(
+      byte[] sessionTranscript, byte[] handoverSelectMsg, byte[] encodedReaderKeyBytes) {
     short readerKeyBytesLen = Util.getShort(encodedReaderKeyBytes, (short) 0);
     short deviceEngBytesLen = Util.getShort(handoverSelectMsg, DEVICE_ENGAGEMENT_LEN);
     short deviceEngBytesStart = Util.getShort(handoverSelectMsg, DEVICE_ENGAGEMENT_START);
@@ -312,91 +316,129 @@ public class Session {
 
     // Add SessionTranscriptBytes = #6.24(bstr .cbor SessionTranscript)
     short offset = (short) 2;
-    sessionTranscript[offset++] = (byte) (
-        MdlSpecifications.CBOR_SEMANTIC_TAG | MdlSpecifications.CBOR_UINT8_LENGTH);
+    sessionTranscript[offset++] =
+        (byte) (MdlSpecifications.CBOR_SEMANTIC_TAG | MdlSpecifications.CBOR_UINT8_LENGTH);
     sessionTranscript[offset++] = (byte) (MdlSpecifications.CBOR_SEMANTIC_TAG_ENCODED_CBOR);
     if (totalLen > 255) {
-      sessionTranscript[offset++] = (byte) (MdlSpecifications.CBOR_BINARY_STR
-          | MdlSpecifications.CBOR_UINT16_LENGTH);
+      sessionTranscript[offset++] =
+          (byte) (MdlSpecifications.CBOR_BINARY_STR | MdlSpecifications.CBOR_UINT16_LENGTH);
       Util.setShort(sessionTranscript, offset, totalLen);
       offset += 2;
     } else {
-      sessionTranscript[offset++] = (byte) (MdlSpecifications.CBOR_BINARY_STR
-          | MdlSpecifications.CBOR_UINT8_LENGTH);
+      sessionTranscript[offset++] =
+          (byte) (MdlSpecifications.CBOR_BINARY_STR | MdlSpecifications.CBOR_UINT8_LENGTH);
       sessionTranscript[offset++] = (byte) totalLen;
     }
     // Add SessionTranscript Array of 3 elements
     sessionTranscript[offset++] = (byte) (MdlSpecifications.CBOR_ARRAY | (byte) 3);
 
-    // First element is DeviceEngagementBytes = #6.24(bstr .cbor DeviceEngagement in handoverSelectMsg)
-    sessionTranscript[offset++] = (byte) (
-        MdlSpecifications.CBOR_SEMANTIC_TAG | MdlSpecifications.CBOR_UINT8_LENGTH);
+    // First element is DeviceEngagementBytes = #6.24(bstr .cbor DeviceEngagement in
+    // handoverSelectMsg)
+    sessionTranscript[offset++] =
+        (byte) (MdlSpecifications.CBOR_SEMANTIC_TAG | MdlSpecifications.CBOR_UINT8_LENGTH);
     sessionTranscript[offset++] = (byte) (MdlSpecifications.CBOR_SEMANTIC_TAG_ENCODED_CBOR);
-    sessionTranscript[offset++] = (byte) (MdlSpecifications.CBOR_BINARY_STR
-        | MdlSpecifications.CBOR_UINT8_LENGTH);
+    sessionTranscript[offset++] =
+        (byte) (MdlSpecifications.CBOR_BINARY_STR | MdlSpecifications.CBOR_UINT8_LENGTH);
     sessionTranscript[offset++] = (byte) deviceEngBytesLen;
-    //copy DeviceEngagement from handoverSelectMsg select message
-    offset = Util.arrayCopyNonAtomic(handoverSelectMsg, deviceEngBytesStart, sessionTranscript,
-        offset, deviceEngBytesLen);
+    // copy DeviceEngagement from handoverSelectMsg select message
+    offset =
+        Util.arrayCopyNonAtomic(
+            handoverSelectMsg, deviceEngBytesStart, sessionTranscript, offset, deviceEngBytesLen);
 
     // Second element is EReaderKeyBytes which is same as encodedReaderKeyBytes.
-    offset = Util.arrayCopyNonAtomic(encodedReaderKeyBytes, (short) 2, sessionTranscript, offset,
-        readerKeyBytesLen);
+    offset =
+        Util.arrayCopyNonAtomic(
+            encodedReaderKeyBytes, (short) 2, sessionTranscript, offset, readerKeyBytesLen);
 
     // Third element is bstr .cbor handoverSelectMsg
     sessionTranscript[offset++] = (byte) (MdlSpecifications.CBOR_ARRAY | (byte) 2);
-    sessionTranscript[offset++] = (byte) (MdlSpecifications.CBOR_BINARY_STR |
-        MdlSpecifications.CBOR_UINT8_LENGTH);
+    sessionTranscript[offset++] =
+        (byte) (MdlSpecifications.CBOR_BINARY_STR | MdlSpecifications.CBOR_UINT8_LENGTH);
     sessionTranscript[offset++] = (byte) handoverSelectMsgLen;
-    offset = Util.arrayCopyNonAtomic(handoverSelectMsg, handoverSelectMsgStart, sessionTranscript,
-        offset, handoverSelectMsgLen);
+    offset =
+        Util.arrayCopyNonAtomic(
+            handoverSelectMsg,
+            handoverSelectMsgStart,
+            sessionTranscript,
+            offset,
+            handoverSelectMsgLen);
     sessionTranscript[offset++] = (byte) 0xF6; // simple value 22.
     // Finally, update the session transcript length.
     Util.setShort(sessionTranscript, (short) 0, (short) (offset - 2));
-    //System.out.println("Device Side Session Transcript:");
-    SEProvider.print(sessionTranscript, (short) 2, Util.getShort(sessionTranscript, (short) 0));
   }
 
   boolean isSessionInitialized() {
     return Util.getShort(mSessionTranscriptBytes, (short) 0) > 0;
   }
 
-  short encryptDecryptData(byte[] mBuffer, short dataStart,
-      short dataLen, AESKey key, short counter, boolean encrypt,
-      short[] retVal, boolean justUpdate) {
+  short encryptDecryptData(
+      byte[] mBuffer,
+      short dataStart,
+      short dataLen,
+      AESKey key,
+      short counter,
+      boolean encrypt,
+      short[] retVal,
+      boolean justUpdate) {
     byte[] scratch = getScratchPad(retVal);
     short scratchStart = retVal[0];
-    short nonceLen = generateNonce(counter, scratch, scratchStart);
+    short nonceLen = generateNonce(encrypt, counter, scratch, scratchStart);
     if (encrypt) {
       return mSEProvider.aesGCMEncryptOneShot(
-          key, mBuffer, dataStart, dataLen, mBuffer,
+          key,
+          mBuffer,
+          dataStart,
+          dataLen,
+          mBuffer,
           dataStart,
           scratch,
-          scratchStart, nonceLen, null, (short) 0, (short) 0, justUpdate);
+          scratchStart,
+          nonceLen,
+          null,
+          (short) 0,
+          (short) 0,
+          justUpdate);
     } else {
-      return mSEProvider.aesGCMDecryptOneShot(key, mBuffer, dataStart, dataLen, mBuffer,
-          dataStart, scratch,
-          scratchStart, nonceLen, null, (short) 0, (short) 0, justUpdate);
+      return mSEProvider.aesGCMDecryptOneShot(
+          key,
+          mBuffer,
+          dataStart,
+          dataLen,
+          mBuffer,
+          dataStart,
+          scratch,
+          scratchStart,
+          nonceLen,
+          null,
+          (short) 0,
+          (short) 0,
+          justUpdate);
     }
   }
 
-  void beginIncrementalEncryption(short counter, byte[] scratch, short scratchStart,
-      short scratchLen) {
+  void beginIncrementalEncryption(
+      short counter, byte[] scratch, short scratchStart, short scratchLen) {
     Util.arrayFillNonAtomic(scratch, scratchStart, SEProvider.AES_GCM_NONCE_LENGTH, (byte) 0);
     scratch[(short) (scratchStart + 7)] = 1;
     Util.setShort(scratch, (short) (scratchStart + 10), counter);
     mBuffer[BUF_LENGTH_OFFSET] = 0;
-    mSEProvider.beginAesGcmOperation(mDeviceKey, true,
-        scratch, scratchStart, SEProvider.AES_GCM_NONCE_LENGTH,
-        null, (short) 0, (short) 0);
+    mSEProvider.beginAesGcmOperation(
+        mDeviceKey,
+        true,
+        scratch,
+        scratchStart,
+        SEProvider.AES_GCM_NONCE_LENGTH,
+        null,
+        (short) 0,
+        (short) 0);
   }
 
   /**
    * This method incrementally encrypts the data in place. It expects that incoming buffer has at
    * least 16 bytes (one block) extra at end i.e. len = data length + 16;.
    */
-  short encryptDataIncrementally(byte[] buf, short start, short len,
-      byte[] scratch, short scratchStart, short scratchLen) {
+  short encryptDataIncrementally(
+      byte[] buf, short start, short len, byte[] scratch, short scratchStart, short scratchLen) {
     // If the data is not block aligned then buffer the non block aligned bytes and make the
     // input block aligned.
     byte rem = (byte) (len % 16);
@@ -408,8 +450,7 @@ public class Session {
     // encrypt in place
     len -= rem;
     scratchLen -= (scratchLen % 16);
-    dataEnd = mSEProvider.encryptDecryptInPlace(buf, start, len,
-        scratch, scratchStart, scratchLen);
+    dataEnd = mSEProvider.encryptDecryptInPlace(buf, start, len, scratch, scratchStart, scratchLen);
     // There should be no internal buffering happening as input has been block aligned.
     if (len != (short) (dataEnd - start)) {
       ISOException.throwIt(CryptoException.ILLEGAL_VALUE);
@@ -422,18 +463,17 @@ public class Session {
     return (short) (index - start);
   }
 
-  private short generateNonce(short counter, byte[] scratch, short scratchStart) {
+  private short generateNonce(boolean encrypt, short counter, byte[] scratch, short scratchStart) {
     byte zeros = (byte) (SEProvider.AES_GCM_NONCE_LENGTH - 2);
     Util.arrayFillNonAtomic(scratch, scratchStart, zeros, (byte) 0);
+    scratch[(short) (scratchStart + 7)] = (byte) (encrypt ? 1 : 0);
     Util.setShort(scratch, (short) (scratchStart + zeros), counter);
     return SEProvider.AES_GCM_NONCE_LENGTH;
   }
 
-  public short coseKey(byte[] buffer, short start, short len, short keyId,
-      short[] structure) {
-    SEProvider.print(buffer, start, len);
-    if (buffer[start++] != (byte) 0xD8 ||
-        buffer[start++] != MdlSpecifications.CBOR_SEMANTIC_TAG_ENCODED_CBOR) {
+  public short coseKey(byte[] buffer, short start, short len, short keyId, short[] structure) {
+    if (buffer[start++] != (byte) 0xD8
+        || buffer[start++] != MdlSpecifications.CBOR_SEMANTIC_TAG_ENCODED_CBOR) {
       ISOException.throwIt(ISO7816.SW_DATA_INVALID);
     }
     len -= 2;
@@ -443,13 +483,16 @@ public class Session {
 
     short[] type = mMdlSpecifications.getStructure(keyId);
     offset = mMdlSpecifications.decodeStructure(type, structure, buffer, offset, len);
-    //TODO introduce fixed value in structure decoding rule - this eliminate need for the
+    // TODO introduce fixed value in structure decoding rule - this eliminate need for the
     // following if else
-    if (buffer[structure[0]] != MdlSpecifications.COSE_KEY_KTY_VAL_EC2 || structure[1] != (byte) 1
-        ||
-        buffer[structure[2]] != MdlSpecifications.COSE_KEY_CRV_VAL_EC2_P256 || structure[3] != 1 ||
-        structure[4] == 0 || structure[5] != 34 ||
-        structure[6] == 0 || structure[7] != 34) {
+    if (buffer[structure[0]] != MdlSpecifications.COSE_KEY_KTY_VAL_EC2
+        || structure[1] != (byte) 1
+        || buffer[structure[2]] != MdlSpecifications.COSE_KEY_CRV_VAL_EC2_P256
+        || structure[3] != 1
+        || structure[4] == 0
+        || structure[5] != 34
+        || structure[6] == 0
+        || structure[7] != 34) {
       ISOException.throwIt(ISO7816.SW_DATA_INVALID);
     }
     return offset;
@@ -461,28 +504,31 @@ public class Session {
       ISOException.throwIt(ISO7816.SW_DATA_INVALID);
     }
     short length = mDecoder.readLength();
-    length = (short) (Util.arrayCopyNonAtomic(mDecoder.getBuffer(), mDecoder.getCurrentOffset(),
-        out, start, length) - start);
+    length =
+        (short)
+            (Util.arrayCopyNonAtomic(
+                    mDecoder.getBuffer(), mDecoder.getCurrentOffset(), out, start, length)
+                - start);
     mDecoder.increaseOffset(length);
     return length;
   }
 
   /* The tag payload is a CBOR Byte string containing Cose Key structure of some length which
-      will be always > 23 but less than 256 and hence short encoding can be used which will be
-      defined by the device management data 0x58, INVALID_VALUE, The Cose Key structure for
-      ephemeral session key is a map of 4 elements i.e. 0xA4. The four elements are as follows:
-        1. Key Type (1): EC2 (2) - both CBOR unsigned int - 01, 02,
-        2. EC2 Curve Type (-1): P_256 (1) - the negative CBOR i.e. major type 2 and -1 is 0x20 -
-           20,01,
-        3. EC2 Key X co-ord (-2 i.e. 0x21) - CBOR Byte String of X Co-ord
-        4. EC2 Key Y co-ord (-3 i.e. 0x22) - CBOR Byte String of Y Co-ord
-   */
+     will be always > 23 but less than 256 and hence short encoding can be used which will be
+     defined by the device management data 0x58, INVALID_VALUE, The Cose Key structure for
+     ephemeral session key is a map of 4 elements i.e. 0xA4. The four elements are as follows:
+       1. Key Type (1): EC2 (2) - both CBOR unsigned int - 01, 02,
+       2. EC2 Curve Type (-1): P_256 (1) - the negative CBOR i.e. major type 2 and -1 is 0x20 -
+          20,01,
+       3. EC2 Key X co-ord (-2 i.e. 0x21) - CBOR Byte String of X Co-ord
+       4. EC2 Key Y co-ord (-3 i.e. 0x22) - CBOR Byte String of Y Co-ord
+  */
   short generateAndAddEDeviceKey_p256(byte[] buf, short offset) {
     mECp256DeviceKeys.genKeyPair();
     ECPublicKey pub = (ECPublicKey) mECp256DeviceKeys.getPublic();
     // Write Byte string with 23 < len < 256 i.e. short encoding
-    buf[offset++] = (byte) (MdlSpecifications.CBOR_BINARY_STR
-        | MdlSpecifications.CBOR_MAX_256_BYTES);
+    buf[offset++] =
+        (byte) (MdlSpecifications.CBOR_BINARY_STR | MdlSpecifications.CBOR_MAX_256_BYTES);
     // length offset - fill this later
     short lenOff = offset;
     offset++;
@@ -497,8 +543,8 @@ public class Session {
     // Third pair i.e. X Cord of the Key = 0x21 i.e. -2
     buf[offset++] = (byte) (MdlSpecifications.CBOR_NEG_INT | (byte) (2 - 1));
     // Byte String which will between 23 and 256 - short encoding
-    buf[offset++] = (byte) (MdlSpecifications.CBOR_BINARY_STR
-        | MdlSpecifications.CBOR_MAX_256_BYTES);
+    buf[offset++] =
+        (byte) (MdlSpecifications.CBOR_BINARY_STR | MdlSpecifications.CBOR_MAX_256_BYTES);
     // Get X9.62 formatted uncompressed octet string of the point. This is generally
     // 0x04 || {32 bytes of x cord} || {32 bytes of y cord}
     byte len = (byte) pub.getW(buf, offset); // len = 2 * coordLen + 1
@@ -512,8 +558,8 @@ public class Session {
     // Y Cord of the Key = 0x22 i.e. -3
     buf[offset++] = (byte) (MdlSpecifications.CBOR_NEG_INT | (byte) (3 - 1));
     // Byte String which will be always be greater than 23 and less than 256 - short encoding
-    buf[offset++] = (byte) (MdlSpecifications.CBOR_BINARY_STR
-        | MdlSpecifications.CBOR_MAX_256_BYTES);
+    buf[offset++] =
+        (byte) (MdlSpecifications.CBOR_BINARY_STR | MdlSpecifications.CBOR_MAX_256_BYTES);
     // Write len
     buf[offset++] = len;
     offset += len;
@@ -529,5 +575,4 @@ public class Session {
     }
     return mBuffer[BUF_LENGTH_OFFSET];
   }
-
 }

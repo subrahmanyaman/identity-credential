@@ -55,16 +55,17 @@ import javacardx.apdu.ExtendedLength;
 public class ProvisioningApplet extends Applet implements ExtendedLength {
 
   public static final byte[] DIRECT_ACCESS_PROVISIONING_APPLET_ID = {
-      (byte) 0xA0, 0x00, 0x00, 0x02, 0x48, 0x00, 0x01, 0x01, 0x01};
+    (byte) 0xA0, 0x00, 0x00, 0x02, 0x48, 0x00, 0x01, 0x01, 0x01
+  };
 
   // Maximum Size of the document that can be stored per slot is 32K.
-  public final static short MAX_MDOC_SIZE = (short) 0x7FFF;
+  public static final short MAX_MDOC_SIZE = (short) 0x7FFF;
   // APDU instructions
-  public final static byte INS_ENVELOPE = (byte) 0xC3;
-  public final static byte INS_PROVISION_DATA = (byte) 0x01;
+  public static final byte INS_ENVELOPE = (byte) 0xC3;
+  public static final byte INS_PROVISION_DATA = (byte) 0x01;
   // Factory provisioning command tags for the attestation keys.
-  public final static byte TAG_ATT_PUB_KEY_CERT = 0x01;
-  public final static byte TAG_ATT_PRIVATE_KEY = 0x02;
+  public static final byte TAG_ATT_PUB_KEY_CERT = 0x01;
+  public static final byte TAG_ATT_PRIVATE_KEY = 0x02;
   // Provisioning Commands that corresponds to Direct Access Store's AIDL API.
   public static final byte CMD_MDOC_CREATE = 1;
   public static final byte CMD_MDOC_LOOKUP = 3;
@@ -86,20 +87,31 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
   private static final byte CTX_SELECTED_DOCUMENT = 2;
   private static final byte SELECT_MDOC = 0;
 
-
   /**
    * CBOR Map = { 0:CBOR uint version, - MS byte major and LS byte minor versions respectively.
    * 1:CBOR uint maxSlots, 2:CBOR uint maxDocSize, 3:CBOR uint minExtendedApduBufSize, 4: CBOR uint
    * number of pre-allocated slots, - each slot equal to maxDocSize. }
    */
   private static final byte[] INFORMATION = {
-      (byte) ((byte) (CBORBase.TYPE_MAP << 5) | (byte) 5),
-      0, CBORBase.ENCODED_TWO_BYTES, 0x10, 0x00,
-      1, MAX_DOCUMENTS_SLOTS,
-      2, CBORBase.ENCODED_TWO_BYTES, 0x7F, (byte) 0xFF,
-      3, CBORBase.ENCODED_TWO_BYTES, 0x10, (byte) 0x00,
-      4, MAX_DOCUMENTS_SLOTS,
+    (byte) ((byte) (CBORBase.TYPE_MAP << 5) | (byte) 5),
+    0,
+    CBORBase.ENCODED_TWO_BYTES,
+    0x10,
+    0x00,
+    1,
+    MAX_DOCUMENTS_SLOTS,
+    2,
+    CBORBase.ENCODED_TWO_BYTES,
+    0x7F,
+    (byte) 0xFF,
+    3,
+    CBORBase.ENCODED_TWO_BYTES,
+    0x10,
+    (byte) 0x00,
+    4,
+    MAX_DOCUMENTS_SLOTS,
   };
+
   // Array of slots
   private static MDoc[] mDocuments;
   // Scratch pad
@@ -125,16 +137,16 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
   byte[] mDataStorage;
   KeyPair mAttestKey;
 
-  private ProvisioningApplet() {
+  private ProvisioningApplet(SEProvider se) {
     mPublicKeyCertLength = mPublicKeyCertStart = mStorageIndex = 0;
     mDataStorage = new byte[4096];
     mAttestKey = new KeyPair(KeyPair.ALG_EC_FP, KeyBuilder.LENGTH_EC_FP_256);
-    mSEProvider = new SEProvider();
+    mSEProvider = se;
     mSEProvider.initECKey(mAttestKey);
 
-    mScratch = JCSystem.makeTransientByteArray(SEProvider.MAX_SCRATCH_SIZE,
-        JCSystem.CLEAR_ON_DESELECT);
-    heap = JCSystem.makeTransientByteArray(SEProvider.MAX_BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
+    mScratch =
+        JCSystem.makeTransientByteArray(mSEProvider.MAX_SCRATCH_SIZE, JCSystem.CLEAR_ON_DESELECT);
+    heap = JCSystem.makeTransientByteArray(mSEProvider.MAX_BUFFER_SIZE, JCSystem.CLEAR_ON_DESELECT);
     mDecoder = new CBORDecoder();
     mEncoder = new CBOREncoder();
     mContext = JCSystem.makeTransientShortArray(MAX_CONTEXT_SIZE, JCSystem.CLEAR_ON_DESELECT);
@@ -149,12 +161,21 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
   }
 
   public static void install(byte[] bArray, short bOffset, byte bLength) {
-    new ProvisioningApplet().register();
+    // check incoming parameter data
+    byte iLen = bArray[bOffset]; // aid length
+    bOffset = (short) (bOffset + iLen + 1);
+    byte cLen = bArray[bOffset]; // control info length
+    bOffset = (short) (bOffset + cLen + 1);
+    byte aLen = bArray[bOffset]; // applet data length
+    // make offset point to the applet data.
+    bOffset = (short) (bOffset + 1);
+    SEProvider se = new SEProvider(bArray, bOffset, aLen);
+    new ProvisioningApplet(se).register();
   }
 
   // Create the credential document
-  private static void createDocument(MDoc doc, boolean testCred,
-      byte[] scratch, short start, short len) {
+  private static void createDocument(
+      MDoc doc, boolean testCred, byte[] scratch, short start, short len) {
     // Reserve the available slot
     doc.reserve();
     // Create the document.
@@ -232,7 +253,8 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
 
   private void processProvisionData(APDU apdu) {
     byte[] buf = apdu.getBuffer();
-    if (buf[ISO7816.CLA_ISO7816] != 0 || buf[ISO7816.OFFSET_P1] != 0
+    if (buf[ISO7816.CLA_ISO7816] != 0
+        || buf[ISO7816.OFFSET_P1] != 0
         || buf[ISO7816.OFFSET_P2] != 0) {
       ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
     }
@@ -275,11 +297,9 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
     if (mDataStorage == null) {
       return;
     }
-    Util.arrayFillNonAtomic(
-        mDataStorage, (short) 0, (short) mDataStorage.length, (byte) 0);
+    Util.arrayFillNonAtomic(mDataStorage, (short) 0, (short) mDataStorage.length, (byte) 0);
     mStorageIndex = 0;
   }
-
 
   public void storeAttestationPublicKeyCert(byte[] buf, short start, short len) {
     if (mDataStorage == null) {
@@ -301,7 +321,6 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
     ECPrivateKey key = (ECPrivateKey) mAttestKey.getPrivate();
     key.setS(buf, start, len);
     JCSystem.commitTransaction();
-
   }
 
   public void receiveIncoming(APDU apdu) {
@@ -350,162 +369,185 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
 
     // Applet handles one command at a time. CTX gets cleared when a command completes.
     // handle if it is an mdoc credential command.
-    if (!handleMdocCommands(Util.getShort(buf, start), apdu, heap, (short) 2,
-        len)) {
+    if (!handleMdocCommands(Util.getShort(buf, start), apdu, heap, (short) 2, len)) {
       ISOException.throwIt(ISO7816.SW_DATA_INVALID);
     }
-    //else if (other credential commands in future)
+    // else if (other credential commands in future)
   }
 
   private boolean handleMdocCommands(short cmd, APDU apdu, byte[] buf, short start, short len) {
     switch (cmd) {
-      case CMD_MDOC_CREATE: {
-        //
-        //  [
-        //    byte slot,
-        //    byte testCredential,
-        //    short osVersionLen,
-        //    byte[] osVersion,
-        //    short osPatchLevelLen,
-        //    byte[] osPatchLevel,
-        //    short challengeLen,
-        //    byte[] challengeLen,
-        //    short notBeforeLen,
-        //    byte[] notBefore (ASN1),
-        //    short notAfterLen,
-        //    byte[] notAfter (ASN1),
-        //    short creationDateTimeLen,
-        //    byte[] creationDateTime (milliseconds),
-        //    short attAppIdLen,
-        //    byte[] attAppId,
-        //    short testCredKeyLen,
-        //    byte[] testCredKey,
-        //  ]
+      case CMD_MDOC_CREATE:
+        {
+          //
+          //  [
+          //    byte slot,
+          //    byte testCredential,
+          //    short osVersionLen,
+          //    byte[] osVersion,
+          //    short osPatchLevelLen,
+          //    byte[] osPatchLevel,
+          //    short challengeLen,
+          //    byte[] challengeLen,
+          //    short notBeforeLen,
+          //    byte[] notBefore (ASN1),
+          //    short notAfterLen,
+          //    byte[] notAfter (ASN1),
+          //    short creationDateTimeLen,
+          //    byte[] creationDateTime (milliseconds),
+          //    short attAppIdLen,
+          //    byte[] attAppId,
+          //    short testCredKeyLen,
+          //    byte[] testCredKey,
+          //  ]
 
-        if (buf.length < SEProvider.MAX_BUFFER_SIZE) { // The buffer must be extended length.
-          ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+          if (buf.length < mSEProvider.MAX_BUFFER_SIZE) { // The buffer must be extended length.
+            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+          }
+          byte slot = buf[start++];
+          byte testCredential = buf[start++];
+          short osVersionLen = Util.getShort(buf, start);
+          start += 2;
+          short osVersionStart = start;
+          start += osVersionLen;
+          short osPatchLevelLen = Util.getShort(buf, start);
+          start += 2;
+          short osPatchLevelStart = start;
+          start += osPatchLevelLen;
+          short challengeLen = Util.getShort(buf, start);
+          start += 2;
+          short challengeStart = start;
+          start += challengeLen;
+          short notBeforeLen = Util.getShort(buf, start);
+          start += 2;
+          short notBeforeStart = start;
+          start += notBeforeLen;
+          short notAfterLen = Util.getShort(buf, start);
+          start += 2;
+          short notAfterStart = start;
+          start += notAfterLen;
+          short creationDateTimeLen = Util.getShort(buf, start);
+          start += 2;
+          short creationDateTimeStart = start;
+          start += creationDateTimeLen;
+          short attAppIdLen = Util.getShort(buf, start);
+          start += 2;
+          short attAppIdStart = start;
+          start += attAppIdLen;
+          short payLoadLength = start; // (short) (start - ISO7816.OFFSET_EXT_CDATA);
+          handleCreateMdocCred(
+              apdu,
+              slot,
+              testCredential == 1,
+              osVersionStart,
+              osVersionLen,
+              osPatchLevelStart,
+              osPatchLevelLen,
+              challengeStart,
+              challengeLen,
+              notBeforeStart,
+              notBeforeLen,
+              notAfterStart,
+              notAfterLen,
+              creationDateTimeStart,
+              creationDateTimeLen,
+              attAppIdStart,
+              attAppIdLen,
+              payLoadLength);
+          break;
         }
-        byte slot = buf[start++];
-        byte testCredential = buf[start++];
-        short osVersionLen = Util.getShort(buf, start);
-        start += 2;
-        short osVersionStart = start;
-        start += osVersionLen;
-        short osPatchLevelLen = Util.getShort(buf, start);
-        start += 2;
-        short osPatchLevelStart = start;
-        start += osPatchLevelLen;
-        short challengeLen = Util.getShort(buf, start);
-        start += 2;
-        short challengeStart = start;
-        start += challengeLen;
-        short notBeforeLen = Util.getShort(buf, start);
-        start += 2;
-        short notBeforeStart = start;
-        start += notBeforeLen;
-        short notAfterLen = Util.getShort(buf, start);
-        start += 2;
-        short notAfterStart = start;
-        start += notAfterLen;
-        short creationDateTimeLen = Util.getShort(buf, start);
-        start += 2;
-        short creationDateTimeStart = start;
-        start += creationDateTimeLen;
-        short attAppIdLen = Util.getShort(buf, start);
-        start += 2;
-        short attAppIdStart = start;
-        start += attAppIdLen;
-        short payLoadLength = start;//(short) (start - ISO7816.OFFSET_EXT_CDATA);
-        handleCreateMdocCred(apdu, slot, testCredential == 1,
-            osVersionStart, osVersionLen,
-            osPatchLevelStart, osPatchLevelLen,
-            challengeStart, challengeLen,
-            notBeforeStart, notBeforeLen,
-            notAfterStart, notAfterLen,
-            creationDateTimeStart, creationDateTimeLen,
-            attAppIdStart, attAppIdLen, payLoadLength);
-        break;
-      }
       case CMD_MDOC_SELECT:
         // [byte slot]
-        handleSelectMdoc(buf[start]);//slot
+        handleSelectMdoc(buf[start]); // slot
         break;
-      case CMD_MDOC_CREATE_PRESENTATION_PKG: {
-        // [
-        //   byte slot,
-        //   short notBeforeLen, byte[] notBefore,
-        //   short notAfterLen, byte[] notAfter
-        // ]
-        if (buf.length < SEProvider.MAX_BUFFER_SIZE) { // The buffer must be extended length.
-          ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
-        }
-        byte slot = buf[start++];
-        MDoc doc = findDocument(slot);
-        if (doc == null) {
-          ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
-        }
-        short notBeforeLen = Util.getShort(buf, start);
-        start += 2;
-        short notBeforeStart = start;
-        start += notBeforeLen;
-        short notAfterLen = Util.getShort(buf, start);
-        start += 2;
-        short notAfterStart = start;
-        start += notAfterLen;
-        short testDevAuthPrivateKeyLen = 0;
-        short testDevAuthPrivateKeyStart = 0;
-        short testDevAuthPublicKeyStart = 0;
-        short testDevAuthPublicKeyLen = 0;
-        if (doc.isTestCredential()) {
-          testDevAuthPrivateKeyLen = Util.getShort(buf, start);
+      case CMD_MDOC_CREATE_PRESENTATION_PKG:
+        {
+          // [
+          //   byte slot,
+          //   short notBeforeLen, byte[] notBefore,
+          //   short notAfterLen, byte[] notAfter
+          // ]
+          if (buf.length < mSEProvider.MAX_BUFFER_SIZE) { // The buffer must be extended length.
+            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+          }
+          byte slot = buf[start++];
+          MDoc doc = findDocument(slot);
+          if (doc == null) {
+            ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+          }
+          short notBeforeLen = Util.getShort(buf, start);
           start += 2;
-          testDevAuthPrivateKeyStart = start;
-          start += testDevAuthPrivateKeyLen;
-          testDevAuthPublicKeyLen = Util.getShort(buf, start);
+          short notBeforeStart = start;
+          start += notBeforeLen;
+          short notAfterLen = Util.getShort(buf, start);
           start += 2;
-          testDevAuthPublicKeyStart = start;
-          start += testDevAuthPublicKeyLen;
+          short notAfterStart = start;
+          start += notAfterLen;
+          short testDevAuthPrivateKeyLen = 0;
+          short testDevAuthPrivateKeyStart = 0;
+          short testDevAuthPublicKeyStart = 0;
+          short testDevAuthPublicKeyLen = 0;
+          if (doc.isTestCredential()) {
+            testDevAuthPrivateKeyLen = Util.getShort(buf, start);
+            start += 2;
+            testDevAuthPrivateKeyStart = start;
+            start += testDevAuthPrivateKeyLen;
+            testDevAuthPublicKeyLen = Util.getShort(buf, start);
+            start += 2;
+            testDevAuthPublicKeyStart = start;
+            start += testDevAuthPublicKeyLen;
+          }
+          short payLoadLength = start;
+          handleCreateAuthKeys(
+              apdu,
+              slot,
+              notBeforeStart,
+              notBeforeLen,
+              notAfterStart,
+              notAfterLen,
+              testDevAuthPublicKeyStart,
+              testDevAuthPublicKeyLen,
+              testDevAuthPrivateKeyStart,
+              testDevAuthPrivateKeyLen,
+              payLoadLength);
+          break;
         }
-        short payLoadLength = start;
-        handleCreateAuthKeys(apdu, slot, notBeforeStart, notBeforeLen, notAfterStart, notAfterLen,
-            testDevAuthPublicKeyStart, testDevAuthPublicKeyLen,
-            testDevAuthPrivateKeyStart, testDevAuthPrivateKeyLen, payLoadLength);
-        break;
-      }
       case CMD_MDOC_LOOKUP:
         // [byte slot]
-        handleLookUpCredential(buf[start]);//slot
+        handleLookUpCredential(buf[start]); // slot
         break;
       case CMD_MDOC_DELETE_CREDENTIAL:
         // [byte slot]
-        handleDeleteCredential(buf[start]);//slot
+        handleDeleteCredential(buf[start]); // slot
         break;
-      case CMD_MDOC_GET_INFORMATION: {
-        // [byte slot] or nothing
-        byte slot = (len > 0) ? buf[start] : (byte) -1;
-        handleGetInformation(apdu, slot);
+      case CMD_MDOC_GET_INFORMATION:
+        {
+          // [byte slot] or nothing
+          byte slot = (len > 0) ? buf[start] : (byte) -1;
+          handleGetInformation(apdu, slot);
+          break;
+        }
+      case CMD_MDOC_PROVISION_DATA:
+        {
+          // [byte slot, byte op, short provDataLen, byte[] provDataLen]
+          byte slot = buf[start++];
+          byte op = buf[start++];
+          mDecoder.init(buf, start, len);
+          len = mDecoder.readMajorType(CBORBase.TYPE_BYTE_STRING);
+          handleProvisionData(apdu, slot, op, mDecoder.getCurrentOffset(), len); // Encrypted data.
+        }
         break;
-      }
-      case CMD_MDOC_PROVISION_DATA: {
-        // [byte slot, byte op, short provDataLen, byte[] provDataLen]
-        byte slot = buf[start++];
-        byte op = buf[start++];
-        mDecoder.init(buf, start, len);
-        len = mDecoder.readMajorType(CBORBase.TYPE_BYTE_STRING);
-        handleProvisionData(apdu, slot, op, mDecoder.getCurrentOffset(), len); // Encrypted data.
-      }
-      break;
 
-      case CMD_MDOC_SWAP_IN: {
-        // [byte slot, byte op,short enc_data_len, byte[] encData]
-        byte slot = buf[start++];
-        byte op = buf[start++];
-        mDecoder.init(buf, start, len);
-        len = mDecoder.readMajorType(CBORBase.TYPE_BYTE_STRING);
-        handleSwapInMdoc(apdu,
-            slot, op, mDecoder.getCurrentOffset(), len); //Encrypted data.
-      }
-      break;
+      case CMD_MDOC_SWAP_IN:
+        {
+          // [byte slot, byte op,short enc_data_len, byte[] encData]
+          byte slot = buf[start++];
+          byte op = buf[start++];
+          mDecoder.init(buf, start, len);
+          len = mDecoder.readMajorType(CBORBase.TYPE_BYTE_STRING);
+          handleSwapInMdoc(apdu, slot, op, mDecoder.getCurrentOffset(), len); // Encrypted data.
+        }
+        break;
       default:
         return false;
     }
@@ -518,13 +560,12 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
    * encrypted. It is not stored into the memory. The input data is validated i.e. valid cbor and
    * mdoc values.
    */
-  private void handleProvisionData(APDU apdu, byte slot, byte op, short start,
-      short len) {
+  private void handleProvisionData(APDU apdu, byte slot, byte op, short start, short len) {
     MDoc doc = findDocument(slot);
     if (doc == null) {
       ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
     }
-    byte[] buf = heap;//apdu.getBuffer();
+    byte[] buf = heap; // apdu.getBuffer();
     if (op == BEGIN) {
       // Begin uses the data it decrypts it and then re encrypts it such that more data can be
       // encrypted and added using update operation incrementally.
@@ -533,21 +574,26 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
       short encDataStart = (short) (start + SEProvider.AES_GCM_NONCE_LENGTH);
       short encDataLen = (short) (len - SEProvider.AES_GCM_NONCE_LENGTH);
       // Credential public key is the auth data - copy to scratch
-      short credKeyLen = ((ECPublicKey) doc.getCredentialKey().getPublic()).getW(mScratch,
-          (short) 0);
+      short credKeyLen =
+          ((ECPublicKey) doc.getCredentialKey().getPublic()).getW(mScratch, (short) 0);
       mSEProvider.beginAesGcmOperation(
-          doc.getStorageKey(), false,
-          buf, start, SEProvider.AES_GCM_NONCE_LENGTH,
-          mScratch, (short) 0, credKeyLen);
+          doc.getStorageKey(),
+          false,
+          buf,
+          start,
+          SEProvider.AES_GCM_NONCE_LENGTH,
+          mScratch,
+          (short) 0,
+          credKeyLen);
 
       // decrypt data - the decrypted data will be in scratch buffer. Scratch will be sufficiently
       // large to hold slightly greater than 64 bytes of the data.
-      short end = mSEProvider.encryptDecryptInPlace(buf, encDataStart, encDataLen,
-          mScratch, (short) 0, (short) mScratch.length);
+      short end =
+          mSEProvider.encryptDecryptInPlace(
+              buf, encDataStart, encDataLen, mScratch, (short) 0, (short) mScratch.length);
 
-      short finalLen = mSEProvider.doAesGcmOperation(
-          buf, end, (short) 0,
-          mScratch, (short) 0, false);
+      short finalLen =
+          mSEProvider.doAesGcmOperation(buf, end, (short) 0, mScratch, (short) 0, false);
       Util.arrayCopyNonAtomic(mScratch, (short) 0, buf, end, finalLen);
       end += finalLen;
       short size = (short) (end - encDataStart);
@@ -566,7 +612,7 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
       if (mDecoder.getRawByte() != CBORBase.ENCODED_NULL) {
         ISOException.throwIt(ISO7816.SW_DATA_INVALID);
       }
-      //Now, current offset in decoded stream is pointing to credential data start point, so don't
+      // Now, current offset in decoded stream is pointing to credential data start point, so don't
       // skip one byte. i.e. don't perform mDecoder.increaseOffset((short) 1);
       short decryptedDataLen = mDecoder.getCurrentOffset();
 
@@ -578,19 +624,24 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
       // Now start new encryption - regenerate the nonce.
       mSEProvider.generateRandomData(buf, start, SEProvider.AES_GCM_NONCE_LENGTH);
 
-      credKeyLen = ((ECPublicKey) doc.getCredentialKey().getPublic()).getW(mScratch,
-          (short) 0);
+      credKeyLen = ((ECPublicKey) doc.getCredentialKey().getPublic()).getW(mScratch, (short) 0);
       mSEProvider.beginAesGcmOperation(
-          doc.getStorageKey(), true,
-          buf, start, SEProvider.AES_GCM_NONCE_LENGTH,
-          mScratch, (short) 0, credKeyLen);
+          doc.getStorageKey(),
+          true,
+          buf,
+          start,
+          SEProvider.AES_GCM_NONCE_LENGTH,
+          mScratch,
+          (short) 0,
+          credKeyLen);
 
       // We are now ready to add credential data and encrypt it which will come in update and
       // finish calls.
       // Encrypt the current data. The encrypted data can be less then the input data if it is
       // not block aligned.
-      end = mSEProvider.encryptDecryptInPlace(buf, encDataStart, decryptedDataLen,
-          mScratch, (short) 0, (short) mScratch.length);
+      end =
+          mSEProvider.encryptDecryptInPlace(
+              buf, encDataStart, decryptedDataLen, mScratch, (short) 0, (short) mScratch.length);
       // The response data starts at start with nonce.
       len = (short) (end - start);
       // now package the response as byte string - note this will add the header and decrement
@@ -600,10 +651,11 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
     } else if (op == FINISH) {
       // Encrypts the remaining data, and it will also have auth tag appended at the end.
       // Encrypt
-      short end = mSEProvider.encryptDecryptInPlace(buf, start, len,
-          mScratch, (short) 0, (short) mScratch.length);
-      short finalLen = mSEProvider.doAesGcmOperation(buf, end, (short) 0, mScratch, (short) 0,
-          false);
+      short end =
+          mSEProvider.encryptDecryptInPlace(
+              buf, start, len, mScratch, (short) 0, (short) mScratch.length);
+      short finalLen =
+          mSEProvider.doAesGcmOperation(buf, end, (short) 0, mScratch, (short) 0, false);
       Util.arrayCopyNonAtomic(mScratch, (short) 0, buf, end, finalLen);
       end += finalLen;
       len = (short) (end - start);
@@ -612,8 +664,9 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
     } else if (op == UPDATE) {
       // Update operation encrypts the data and sends it back to client.
       // Encrypt
-      short end = mSEProvider.encryptDecryptInPlace(buf, start, len,
-          mScratch, (short) 0, (short) mScratch.length);
+      short end =
+          mSEProvider.encryptDecryptInPlace(
+              buf, start, len, mScratch, (short) 0, (short) mScratch.length);
       len = (short) (end - start);
       start = addByteStringHeader(buf, start, len);
       len = (short) (end - start);
@@ -637,13 +690,12 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
    * This command can be used for starting, updating and finishing swap in. This is indicated by the
    * op parameter.
    */
-  private void handleSwapInMdoc(APDU apdu, byte slot, byte op,
-      short start, short len) {
+  private void handleSwapInMdoc(APDU apdu, byte slot, byte op, short start, short len) {
     MDoc doc = findDocument(slot);
     if (doc == null) {
       ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
     }
-    byte[] buf = heap;//apdu.getBuffer();
+    byte[] buf = heap; // apdu.getBuffer();
     if (op == BEGIN) {
       // Extract the nonce and then decrypt the data - then start storing it.
       // First 12 bytes will be nonce
@@ -651,18 +703,23 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
       short encDataLen = (short) (len - SEProvider.AES_GCM_NONCE_LENGTH);
 
       // Credential public key is the auth data - copy to scratch
-      short credKeyLen = ((ECPublicKey) doc.getCredentialKey().getPublic()).getW(mScratch,
-          (short) 0);
+      short credKeyLen =
+          ((ECPublicKey) doc.getCredentialKey().getPublic()).getW(mScratch, (short) 0);
       mSEProvider.beginAesGcmOperation(
-          doc.getStorageKey(), false,
-          buf, start, SEProvider.AES_GCM_NONCE_LENGTH,
-          mScratch, (short) 0, credKeyLen);
+          doc.getStorageKey(),
+          false,
+          buf,
+          start,
+          SEProvider.AES_GCM_NONCE_LENGTH,
+          mScratch,
+          (short) 0,
+          credKeyLen);
       doc.startProvisioning();
 
       // decrypt data - the decrypted data will be directly stored in the doc specific flash memory.
-      short end = mSEProvider.encryptDecryptInPlace(
-          buf, encDataStart, encDataLen,
-          mScratch, (short) 0, (short) mScratch.length);
+      short end =
+          mSEProvider.encryptDecryptInPlace(
+              buf, encDataStart, encDataLen, mScratch, (short) 0, (short) mScratch.length);
       short size = (short) (end - encDataStart);
       byte[] apduBuf = apdu.getBuffer();
       Util.arrayCopyNonAtomic(buf, encDataStart, apduBuf, (short) 0, size);
@@ -670,22 +727,24 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
       // B
     } else if (op == FINISH) {
       // Decrypts the remaining data, and it will store and then enumerate the data.
-      short end = mSEProvider.encryptDecryptInPlace(
-          buf, start, len, mScratch, (short) 0, (short) mScratch.length);
-      short finalLen = mSEProvider.doAesGcmOperation(buf, end, (short) 0, mScratch, (short) 0,
-          false);
+      short end =
+          mSEProvider.encryptDecryptInPlace(
+              buf, start, len, mScratch, (short) 0, (short) mScratch.length);
+      short finalLen =
+          mSEProvider.doAesGcmOperation(buf, end, (short) 0, mScratch, (short) 0, false);
       Util.arrayCopyNonAtomic(mScratch, (short) 0, buf, end, finalLen);
       end += finalLen;
       short size = (short) (end - start);
       byte[] apduBuf = apdu.getBuffer();
       Util.arrayCopyNonAtomic(buf, start, apduBuf, (short) 0, size);
       doc.store(apduBuf, (short) 0, size);
-      //doc.store(buf, start, size);
+      // doc.store(buf, start, size);
       doc.commitProvisioning();
     } else if (op == UPDATE) {
       // Update operation decrypts the data and stores it.
-      short end = mSEProvider.encryptDecryptInPlace(
-          buf, start, len, mScratch, (short) 0, (short) mScratch.length);
+      short end =
+          mSEProvider.encryptDecryptInPlace(
+              buf, start, len, mScratch, (short) 0, (short) mScratch.length);
       short size = (short) (end - start);
       byte[] apduBuf = apdu.getBuffer();
       Util.arrayCopyNonAtomic(buf, start, apduBuf, (short) 0, size);
@@ -700,10 +759,10 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
    * then it returns hardware information. Else it returns usage information
    */
   private void handleGetInformation(APDU apdu, byte slot) {
-    //TODO change the hard coded INFORMATION
+    // TODO change the hard coded INFORMATION
     if (slot < 0) {
-      Util.arrayCopyNonAtomic(INFORMATION, (short) 0, apdu.getBuffer(), (short) 0,
-          (short) INFORMATION.length);
+      Util.arrayCopyNonAtomic(
+          INFORMATION, (short) 0, apdu.getBuffer(), (short) 0, (short) INFORMATION.length);
       sendApdu(apdu, (short) 0, (short) INFORMATION.length);
     } else {
       MDoc doc = findDocument(slot);
@@ -715,9 +774,7 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
     }
   }
 
-  /**
-   * This command may not be required.
-   */
+  /** This command may not be required. */
   private void handleSelectMdoc(byte slot) {
     MDoc doc = findDocument(slot);
     if (doc == null) {
@@ -750,43 +807,82 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
    * short keyParams_len, short attest_keyParams_start, short attest_keyParams_len, short
    * attest_keyBlob_start, short attest_keyBlob_len }
    */
-  private void handleCreateMdocCred(APDU apdu, byte slot, boolean testCredential,
-      short osVersionStart, short osVersionLen, short osPatchLevelStart, short osPatchLevelLen,
-      short challengeStart, short challengeLen, short notBeforeStart, short notBeforeLen,
-      short notAfterStart, short notAfterLen, short creationDateTimeStart,
-      short creationDateTimeLen, short attAppIdStart, short attAppIdLen, short payLoadLen
-  ) {
+  private void handleCreateMdocCred(
+      APDU apdu,
+      byte slot,
+      boolean testCredential,
+      short osVersionStart,
+      short osVersionLen,
+      short osPatchLevelStart,
+      short osPatchLevelLen,
+      short challengeStart,
+      short challengeLen,
+      short notBeforeStart,
+      short notBeforeLen,
+      short notAfterStart,
+      short notAfterLen,
+      short creationDateTimeStart,
+      short creationDateTimeLen,
+      short attAppIdStart,
+      short attAppIdLen,
+      short payLoadLen) {
     // Get the document
     MDoc doc = findDocument(slot);
     if (doc == null || doc.isReserved()) {
       ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
     }
     // create the document
-    createDocument(doc, testCredential,
-        mScratch, (short) 0, (short) mScratch.length);
+    createDocument(doc, testCredential, mScratch, (short) 0, (short) mScratch.length);
     mContext[CTX_STATUS] = 0;
-    byte[] buf = heap;//apdu.getBuffer();
+    byte[] buf = heap; // apdu.getBuffer();
     // Skip the input payload
     short start = payLoadLen;
     short certLen =
-        mSEProvider.generateCredKeyCert((ECPrivateKey) mAttestKey.getPrivate(),
+        mSEProvider.generateCredKeyCert(
+            (ECPrivateKey) mAttestKey.getPrivate(),
             (ECPublicKey) (doc.getCredentialKey().getPublic()),
-            buf, osVersionStart, osVersionLen,
-            buf, osPatchLevelStart, osPatchLevelLen,
-            buf, challengeStart, challengeLen,
-            buf, notBeforeStart, notBeforeLen,
-            buf, notAfterStart, notAfterLen,
-            buf, creationDateTimeStart, creationDateTimeLen,
-            buf, attAppIdStart, attAppIdLen, testCredential,
-            buf, start, SEProvider.MAX_BUFFER_SIZE,
-            mScratch, (short) 0, (short) mScratch.length);
+            buf,
+            osVersionStart,
+            osVersionLen,
+            buf,
+            osPatchLevelStart,
+            osPatchLevelLen,
+            buf,
+            challengeStart,
+            challengeLen,
+            buf,
+            notBeforeStart,
+            notBeforeLen,
+            buf,
+            notAfterStart,
+            notAfterLen,
+            buf,
+            creationDateTimeStart,
+            creationDateTimeLen,
+            buf,
+            attAppIdStart,
+            attAppIdLen,
+            testCredential,
+            buf,
+            start,
+            mSEProvider.MAX_BUFFER_SIZE,
+            mScratch,
+            (short) 0,
+            (short) mScratch.length);
     sendApdu(apdu, start, certLen);
   }
 
-  private void handleCreateAuthKeys(APDU apdu, byte slot, short notBeforeStart, short notBeforeLen,
-      short notAfterStart, short notAfterLen,
-      short testDevAuthPublicKeyStart, short testDevAuthPublicKeyLen,
-      short testDevAuthPrivateKeyStart, short testDevAuthPrivateKeyLen,
+  private void handleCreateAuthKeys(
+      APDU apdu,
+      byte slot,
+      short notBeforeStart,
+      short notBeforeLen,
+      short notAfterStart,
+      short notAfterLen,
+      short testDevAuthPublicKeyStart,
+      short testDevAuthPublicKeyLen,
+      short testDevAuthPrivateKeyStart,
+      short testDevAuthPrivateKeyLen,
       short payloadLen) {
     MDoc doc = findDocument(slot);
     if (doc == null) {
@@ -796,33 +892,42 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
     byte[] buf = heap;
     // Generate the key pair
     mSigningKey.genKeyPair();
-    //if the doc is test credential then client can provide test auth keys
+    // if the doc is test credential then client can provide test auth keys
     if (doc.isTestCredential()) {
       if (testDevAuthPrivateKeyLen > 0) {
-        ((ECPrivateKey) mSigningKey.getPrivate()).setS(
-            buf, testDevAuthPrivateKeyStart, testDevAuthPrivateKeyLen);
+        ((ECPrivateKey) mSigningKey.getPrivate())
+            .setS(buf, testDevAuthPrivateKeyStart, testDevAuthPrivateKeyLen);
       }
       if (testDevAuthPublicKeyLen > 0) {
-        ((ECPublicKey) mSigningKey.getPublic()).setW(
-            buf, testDevAuthPublicKeyStart, testDevAuthPublicKeyLen);
+        ((ECPublicKey) mSigningKey.getPublic())
+            .setW(buf, testDevAuthPublicKeyStart, testDevAuthPublicKeyLen);
       }
     }
     // Skip the input payload
     short start = payloadLen;
-    mEncoder.init(buf, start, (short) (SEProvider.MAX_BUFFER_SIZE - payloadLen));
+    mEncoder.init(buf, start, (short) (mSEProvider.MAX_BUFFER_SIZE - payloadLen));
     mEncoder.startMap((short) 2);
 
     // Add the Certificate
     mEncoder.encodeUInt8(MdlSpecifications.KEY_CERT);
     // Generate and add cert - cert should not exceed 512 bytes.
-    short certStart = (short) (SEProvider.MAX_BUFFER_SIZE - SEProvider.SIGNING_CERT_MAX_SIZE);
+    short certStart = (short) (mSEProvider.MAX_BUFFER_SIZE - SEProvider.SIGNING_CERT_MAX_SIZE);
     short certLen =
-        mSEProvider.generateSigningKeyCert((ECPublicKey) (mSigningKey.getPublic()),
+        mSEProvider.generateSigningKeyCert(
+            (ECPublicKey) (mSigningKey.getPublic()),
             (ECPrivateKey) (doc.getCredentialKey().getPrivate()),
-            buf, notBeforeStart, notBeforeLen,
-            buf, notAfterStart, notAfterLen,
-            buf, certStart, SEProvider.SIGNING_CERT_MAX_SIZE,
-            mScratch, (short) 0, (short) (mScratch.length));
+            buf,
+            notBeforeStart,
+            notBeforeLen,
+            buf,
+            notAfterStart,
+            notAfterLen,
+            buf,
+            certStart,
+            SEProvider.SIGNING_CERT_MAX_SIZE,
+            mScratch,
+            (short) 0,
+            (short) (mScratch.length));
     mEncoder.startByteString(certLen);
     Util.arrayCopyNonAtomic(buf, certStart, buf, mEncoder.getCurrentOffset(), certLen);
     mEncoder.increaseOffset(certLen);
@@ -830,13 +935,19 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
     // Encrypt and add data.
     // Start the encrypt operation
     mSEProvider.generateRandomData(mScratch, (short) 0, SEProvider.AES_GCM_NONCE_LENGTH);
-    short size = ((ECPublicKey) doc.getCredentialKey().getPublic()).getW(mScratch,
-        SEProvider.AES_GCM_NONCE_LENGTH);
+    short size =
+        ((ECPublicKey) doc.getCredentialKey().getPublic())
+            .getW(mScratch, SEProvider.AES_GCM_NONCE_LENGTH);
 
     mSEProvider.beginAesGcmOperation(
-        doc.getStorageKey(), true,
-        mScratch, (short) 0, SEProvider.AES_GCM_NONCE_LENGTH,
-        mScratch, SEProvider.AES_GCM_NONCE_LENGTH, size);
+        doc.getStorageKey(),
+        true,
+        mScratch,
+        (short) 0,
+        SEProvider.AES_GCM_NONCE_LENGTH,
+        mScratch,
+        SEProvider.AES_GCM_NONCE_LENGTH,
+        size);
 
     // Encode the input data which is an array of 2 elements. We also add nonce in the front before
     // the array.
@@ -844,8 +955,8 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
     // len will be always 64 = 12 (nonce) + 32 (private key) + 16 (tag) + 1 (Array header) +
     // 2 (priv key bstr header) + 1 (encoded null)
     mEncoder.startByteString((short) 64);
-    Util.arrayCopyNonAtomic(mScratch, (short) 0, buf, mEncoder.getCurrentOffset(),
-        SEProvider.AES_GCM_NONCE_LENGTH);
+    Util.arrayCopyNonAtomic(
+        mScratch, (short) 0, buf, mEncoder.getCurrentOffset(), SEProvider.AES_GCM_NONCE_LENGTH);
     mEncoder.increaseOffset(SEProvider.AES_GCM_NONCE_LENGTH);
     short dataStart = mEncoder.getCurrentOffset();
     mEncoder.startArray((short) 2);
@@ -857,11 +968,12 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
     mEncoder.increaseOffset((short) 1);
     short dataLen = (short) (mEncoder.getCurrentOffset() - dataStart);
     // encrypt the data in place.
-    short dataEnd = mSEProvider.encryptDecryptInPlace(buf, dataStart, dataLen,
-        mScratch, (short) 0, (short) mScratch.length);
+    short dataEnd =
+        mSEProvider.encryptDecryptInPlace(
+            buf, dataStart, dataLen, mScratch, (short) 0, (short) mScratch.length);
     // Finish and add the auth tag
-    short finalLen = mSEProvider.doAesGcmOperation(buf, dataEnd, (short) 0,
-        mScratch, (short) 0, false);
+    short finalLen =
+        mSEProvider.doAesGcmOperation(buf, dataEnd, (short) 0, mScratch, (short) 0, false);
     Util.arrayCopyNonAtomic(mScratch, (short) 0, buf, dataEnd, finalLen);
     dataEnd += finalLen;
     short len = (short) (dataEnd - dataStart + SEProvider.AES_GCM_NONCE_LENGTH);
@@ -870,5 +982,4 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
     }
     sendApdu(apdu, start, (short) (dataEnd - start));
   }
-
 }

@@ -19,11 +19,8 @@ import javacard.framework.ISO7816;
 import javacard.framework.ISOException;
 import javacard.framework.Util;
 
-/**
- * This class implements CBOR encoder.
- */
+/** This class implements CBOR encoder. */
 public class CBOREncoder extends CBORBase {
-
 
   /**
    * Start a new array at the current buffer location with the given array size.
@@ -94,8 +91,8 @@ public class CBOREncoder extends CBORBase {
   /**
    * Encode the given integer value at the current buffer location.
    *
-   * @param value Value to encode in the byte array. Note: as there are no unsigned shorts in
-   *     Java card, a negative number will be interpreted as positive value.
+   * @param value Value to encode in the byte array. Note: as there are no unsigned shorts in Java
+   *     card, a negative number will be interpreted as positive value.
    * @return The number of bytes written to buffer
    */
   public short encodeUInt8(byte value) {
@@ -105,8 +102,8 @@ public class CBOREncoder extends CBORBase {
   /**
    * Encode the given integer value at the current buffer location.
    *
-   * @param value Value to encode in the byte array. Note: as there are no unsigned shorts in
-   *     Java card, a negative number will be interpreted as positive value.
+   * @param value Value to encode in the byte array. Note: as there are no unsigned shorts in Java
+   *     card, a negative number will be interpreted as positive value.
    * @return The number of bytes written to buffer
    */
   public short encodeUInt16(short value) {
@@ -155,7 +152,7 @@ public class CBOREncoder extends CBORBase {
     return writeRawByteArray(value, offset, length);
   }
 
-  final private short encodeValue(byte majorType, short value) {
+  private final short encodeValue(byte majorType, short value) {
     if (isLessThanAsUnsignedShort(value, ENCODED_ONE_BYTE)) {
       return writeRawByte((byte) (majorType | value));
     } else if (isLessThanAsUnsignedShort(value, (short) 0x100)) {
@@ -165,21 +162,19 @@ public class CBOREncoder extends CBORBase {
     }
   }
 
-  final private short writeUInt8(byte type, byte value) {
+  private final short writeUInt8(byte type, byte value) {
     writeRawByte((byte) (type | ENCODED_ONE_BYTE));
     writeRawByte(value);
     return (short) 2;
   }
 
-  final private short writeUInt16(byte type, short value) {
+  private final short writeUInt16(byte type, short value) {
     writeRawByte((byte) (type | ENCODED_TWO_BYTES));
     writeRawShort(value);
     return (short) 3;
   }
 
-  /**
-   * Write the given byte at the current buffer location and increase the offset by one.
-   */
+  /** Write the given byte at the current buffer location and increase the offset by one. */
   public short writeRawByte(byte val) {
     checkIncrement((short) 1);
     getBuffer()[getCurrentOffset()] = val;
@@ -187,9 +182,7 @@ public class CBOREncoder extends CBORBase {
     return (short) 1;
   }
 
-  /**
-   * Write the given short value at the current buffer location and increase the offset by two.
-   */
+  /** Write the given short value at the current buffer location and increase the offset by two. */
   short writeRawShort(short val) {
     checkIncrement((short) 2);
     Util.setShort(getBuffer(), getCurrentOffset(), val);
@@ -207,14 +200,14 @@ public class CBOREncoder extends CBORBase {
    */
   short writeRawByteArray(byte[] value, short offset, short length) {
     checkIncrement(length);
-    if (((short) (value.length + offset) >= 0 &&
-        length > (short) (value.length + offset))
+    if (((short) (value.length + offset) >= 0 && length > (short) (value.length + offset))
         || (short) (length + getCurrentOffset()) > getBufferLength()) {
       ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
     }
     short currentOff = getCurrentOffset();
-    length = (short) (Util.arrayCopyNonAtomic(value, offset, getBuffer(), currentOff, length)
-        - currentOff);
+    length =
+        (short)
+            (Util.arrayCopyNonAtomic(value, offset, getBuffer(), currentOff, length) - currentOff);
     increaseOffset(length);
 
     return length;
@@ -236,5 +229,4 @@ public class CBOREncoder extends CBORBase {
   boolean isLessThanAsUnsignedShort(short n1, short n2) {
     return (n1 < n2) ^ ((n1 < 0) != (n2 < 0));
   }
-
 }
