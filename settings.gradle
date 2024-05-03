@@ -44,3 +44,5 @@ include ':wwwverifier', ":wallet-server"
 include ':identityctl'
 // Samples
 include ':samples:preconsent-mdl', ':samples:age-verifier-mdl', ':samples:simple-verifier'
+// Direct Access
+include ':smartcardio', ':JCardSim', ':mdlApplet'
