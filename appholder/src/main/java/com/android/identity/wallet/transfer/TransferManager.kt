@@ -34,6 +34,7 @@ import com.android.identity.wallet.util.logWarning
 import com.android.identity.wallet.util.requireValidProperty
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
+import com.android.identity.wallet.util.PreferencesHelper
 import com.google.zxing.WriterException
 import com.google.zxing.common.BitMatrix
 import kotlinx.coroutines.suspendCancellableCoroutine

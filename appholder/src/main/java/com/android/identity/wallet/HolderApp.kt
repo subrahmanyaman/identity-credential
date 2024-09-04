@@ -7,6 +7,7 @@ import com.android.identity.android.securearea.AndroidKeystoreSecureArea
 import com.android.identity.android.storage.AndroidStorageEngine
 import com.android.identity.android.util.AndroidLogPrinter
 import com.android.identity.credential.CredentialFactory
+import com.android.identity.direct_access.DirectAccessTransport
 import com.android.identity.document.DocumentStore
 import com.android.identity.documenttype.DocumentTypeRepository
 import com.android.identity.documenttype.knowntypes.DrivingLicense
@@ -23,6 +24,7 @@ import com.android.identity.trustmanagement.TrustPoint
 import com.android.identity.util.Logger
 import com.android.identity.wallet.document.KeysAndCertificates
 import com.android.identity.wallet.document.JCardSimTransport
+import com.android.identity.wallet.document.OmapiTransport
 import com.android.identity.wallet.util.PeriodicKeysRefreshWorkRequest
 import com.android.identity.wallet.util.PreferencesHelper
 import com.google.android.material.color.DynamicColors
@@ -33,6 +35,10 @@ import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 
 class HolderApp: Application() {
+
+    public interface SEListener {
+        fun onConnected() {}
+    }
 
     private val documentTypeRepository by lazy {
         DocumentTypeRepository()
@@ -77,9 +83,11 @@ class HolderApp: Application() {
         lateinit var documentTypeRepositoryInstance: DocumentTypeRepository
         lateinit var trustManagerInstance: TrustManager
         lateinit var certificateStorageEngineInstance: StorageEngine
+        lateinit var transport: DirectAccessTransport
         fun createDocumentStore(
             context: Context,
-            secureAreaRepository: SecureAreaRepository
+            secureAreaRepository: SecureAreaRepository,
+            callback: SEListener
         ): DocumentStore {
             val storageDir = PreferencesHelper.getKeystoreBackedStorageLocation(context)
             val storageEngine = AndroidStorageEngine.Builder(context, storageDir).build()
@@ -93,11 +101,13 @@ class HolderApp: Application() {
             val credentialFactory = CredentialFactory()
             credentialFactory.addCredentialImplementation(MdocCredential::class)
             credentialFactory.addCredentialImplementation(DirectAccessCredential::class)
+            // TODO Make UX changes to select transport - JCardSimTransport / OMAPITransport
+            transport = OmapiTransport.instance(context, callback).getDirectAccessOmapiTransport();
             return DocumentStore(
                 storageEngine,
                 secureAreaRepository,
                 credentialFactory,
-                JCardSimTransport.instance())
+                transport)
         }
     }
 

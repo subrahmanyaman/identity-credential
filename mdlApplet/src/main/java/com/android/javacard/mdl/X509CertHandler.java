@@ -1396,6 +1396,7 @@ public class X509CertHandler {
     // skip one byte and decrement tag length by one.
     retVal[3]++;
     retVal[2]--;
+
     Util.arrayCopyNonAtomic(buf, retVal[3], scratch, scratchStart, retVal[2]);
     return retVal[2];
   }

@@ -27,6 +27,7 @@ import com.android.identity.android.mdoc.engagement.NfcEngagementHelper
 import com.android.identity.android.mdoc.transport.DataTransport
 import com.android.identity.crypto.Crypto
 import com.android.identity.crypto.EcPublicKey
+import com.android.identity.wallet.HolderApp
 import com.android.identity.wallet.R
 import com.android.identity.wallet.document.JCardSimTransport
 import com.android.identity.wallet.transfer.Communication
@@ -155,7 +156,7 @@ class NfcEngagementHandler : HostApduService() {
     override fun processCommandApdu(commandApdu: ByteArray, extras: Bundle?): ByteArray? {
         return engagementHelper.nfcProcessCommandApdu(commandApdu,
                                                       PreferencesHelper.isDirectAccessDemoEnabled(),
-                                                      JCardSimTransport.instance())
+                                                      HolderApp.transport)
     }
 
     override fun onDeactivated(reason: Int) {

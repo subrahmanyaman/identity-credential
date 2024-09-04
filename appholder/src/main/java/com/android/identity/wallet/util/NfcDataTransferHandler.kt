@@ -19,6 +19,7 @@ package com.android.identity.wallet.util
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
 import com.android.identity.android.mdoc.transport.DataTransportNfc
+import com.android.identity.wallet.HolderApp
 import com.android.identity.wallet.document.JCardSimTransport
 import com.android.identity.wallet.transfer.TransferManager
 
@@ -36,7 +37,9 @@ class NfcDataTransferHandler : HostApduService() {
         //log("processCommandApdu: Command-> ${FormatUtil.encodeToString(commandApdu)}")
         print(commandApdu)
         if (PreferencesHelper.isDirectAccessDemoEnabled()) {
-            return DataTransportNfc.processCommandApdu(transport = JCardSimTransport.instance(), apdu = commandApdu)
+            return DataTransportNfc.processCommandApdu(
+                transport = HolderApp.transport,
+                apdu = commandApdu)
         } else {
             return DataTransportNfc.processCommandApdu(this, commandApdu)
         }

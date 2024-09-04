@@ -152,13 +152,13 @@ public class PresentationApplet extends Applet implements ExtendedLength, MdlSer
     0x01, // version
     0x03, // Data length of the max command size
     0x01, // Data type of the max command size
-    (byte) ((Context.MAX_BUF_SIZE >> 8) & 0x00FF),
-    (byte) (Context.MAX_BUF_SIZE & 0x00FF),
+    (byte) ((Context.MAX_CMD_DATA_RSP_DATA >> 8) & 0x00FF),
+    (byte) (Context.MAX_CMD_DATA_RSP_DATA & 0x00FF),
     // Max Cmd Size
     0x03, // Data length of the max response size
     0x02, // Data type of the max response size
-    (byte) ((Context.MAX_BUF_SIZE >> 8) & 0x00FF),
-    (byte) (Context.MAX_BUF_SIZE & 0x00FF),
+    (byte) ((Context.MAX_CMD_DATA_RSP_DATA >> 8) & 0x00FF),
+    (byte) (Context.MAX_CMD_DATA_RSP_DATA & 0x00FF),
     // Max response Size
 
     // 3. "mdoc" NDEF Record - start = 33 + 22 + 2= 57
@@ -651,7 +651,6 @@ public class PresentationApplet extends Applet implements ExtendedLength, MdlSer
       if (itemsStart == INVALID_VALUE || readerAuthStart == INVALID_VALUE) {
         ISOException.throwIt(ISO7816.SW_DATA_INVALID);
       }
-
       // Now process Items Request
       if (!processItemsRequest(
           buf, itemsStart, itemsLen, readerAuthStart, readerAuthLen, docRequest)) {
@@ -952,17 +951,15 @@ public class PresentationApplet extends Applet implements ExtendedLength, MdlSer
     byte[] buf = apdu.getBuffer();
     short le = apdu.setOutgoing();
     short index = 0;
+    mContext.setChunkSize(le);
 
     // This is the first message in the chain of responses.
     if (firstMessage) {
-      if (mContext.mChunkSize[0] != 0) {
-        ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
-      }
       // calculate the device response length - this is required because envelope header and
       // session header requires total device response length. This only returns size of data to
       // be encoded. It does not include the Auth tag which will be added to the encrypted
       // device response data.
-      mContext.setOutGoing(le, calculateResponseLength(), getNextDocIndex(INITIAL_DOC_INDEX));
+      mContext.setOutGoing(calculateResponseLength(), getNextDocIndex(INITIAL_DOC_INDEX));
 
       // Add the envelope and session data headers and resp length includes the auth tag length
       // which will be concatenated with encrypted response data.
@@ -1301,7 +1298,7 @@ public class PresentationApplet extends Applet implements ExtendedLength, MdlSer
       short certEnd = (short) (certStart + certLen);
       // Now decode cert - this will return 4 parameters of the cert in mRetVal
       if (!mX509CertHandler.decodeCert(
-              buf, certStart, certEnd, mRetVal, scratch, scratchStart, scratchLen))
+          buf, certStart, certEnd, mRetVal, scratch, scratchStart, scratchLen))
         return false;
 
       if (doc.isMatchingReaderAuthKey(buf, mRetVal[5], mRetVal[6])) {

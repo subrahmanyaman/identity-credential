@@ -19,6 +19,7 @@ import android.content.Context
 import android.se.omapi.SEService
 import com.android.identity.android.securearea.AndroidKeystoreSecureArea
 import com.android.identity.android.storage.AndroidStorageEngine
+import com.android.identity.credential.Credential
 import com.android.identity.credential.CredentialFactory
 import com.android.identity.credential.SecureAreaBoundCredential
 import com.android.identity.crypto.CertificateChain
@@ -43,7 +44,7 @@ import kotlin.concurrent.withLock
 
 abstract class DirectAccessTest {
     companion object {
-        private const val TAG = "DirectAccessTest"
+        public const val TAG = "DirectAccessTest"
     }
 
     enum class TransportType {
@@ -62,6 +63,7 @@ abstract class DirectAccessTest {
     protected lateinit var secureAreaRepository: SecureAreaRepository
     protected lateinit var credentialFactory: CredentialFactory
     protected lateinit var documentStore: DocumentStore
+    protected lateinit var pendingCredential: DirectAccessCredential
     protected lateinit var mDocName: String
     protected lateinit var context: Context
     protected lateinit var mReaderKeys: ArrayList<KeyPair>
@@ -116,8 +118,11 @@ abstract class DirectAccessTest {
 
     private fun getDirectAccessTransport(transType: TransportType?): DirectAccessTransport {
         return when (transType) {
-            TransportType.SOCKET -> DirectAccessSocketTransport()
-            TransportType.OMAPI -> DirectAccessOmapiTransport(mSEService)
+            TransportType.SOCKET -> DirectAccessSocketTransport(DirectAccessCredential.DIRECT_ACCESS_PROVISIONING_APPLET_ID)
+            TransportType.OMAPI -> {
+                mSEService = SEService(context, SynchronousExecutor(), mListener)
+                DirectAccessOmapiTransport(mSEService, DirectAccessCredential.DIRECT_ACCESS_PROVISIONING_APPLET_ID)
+            }
             TransportType.SMARTCARDIO -> DirectAccessSmartCardTransport()
             else -> throw IllegalArgumentException("invalid transport type")
         }
@@ -145,7 +150,9 @@ abstract class DirectAccessTest {
     }
 
     protected open fun reset() {
-        d(TAG, "reset")
+        mTransport.closeConnection()
+        mTransport.openConnection()
+        pendingCredential!!.delete();
         documentStore.deleteDocument(mDocName)
         try {
             mTransport.closeConnection()

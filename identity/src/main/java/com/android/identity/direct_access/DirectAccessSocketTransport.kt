@@ -8,7 +8,7 @@ import java.net.Socket
 /**
  * For use with emulator running on desktop
  */
-class DirectAccessSocketTransport : DirectAccessTransport {
+class DirectAccessSocketTransport(private val provisionAppletAid: ByteArray) : DirectAccessTransport {
     private val PORT = 8080
     private val IPADDR = "192.168.9.112"
     private val MAX_RECV_BUFFER_SIZE = 700
@@ -25,7 +25,27 @@ class DirectAccessSocketTransport : DirectAccessTransport {
             val serverAddress = InetAddress.getByName(IPADDR)
             mSocket = Socket(serverAddress, PORT)
             socketStatus = true
+            // Select Provision Applet
+            selectApplet(provisionAppletAid)
         }
+    }
+
+    private fun selectApplet(aid : ByteArray) : ByteArray {
+        val selectCmd = ByteArray(aid.size + 5 + 1)
+        selectCmd[0] = 0x00
+        selectCmd[1] = 0xA4.toByte()
+        selectCmd[2] = 0x04
+        selectCmd[3] = 0x00
+        selectCmd[4] = aid.size.toByte()
+        System.arraycopy(
+            aid,
+            0,
+            selectCmd,
+            5,
+            aid.size
+        )
+        selectCmd[selectCmd.size - 1] = 0
+        return sendData(selectCmd)
     }
 
     @Throws(IOException::class)

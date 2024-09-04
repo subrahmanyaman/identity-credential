@@ -63,7 +63,8 @@ public class IsoDepWrapperImpl implements IsoDepWrapper {
 
   @Override
   public int getMaxTransceiveLength() {
-    return 16384;//mIsoDep.getMaxTransceiveLength();
+    // This value is set based on the Pixel's eSE APDU Buffer size
+    return 261;
   }
 
   @Override

@@ -248,15 +248,16 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
         default:
           ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
       }
+    } else {
+      ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
     }
   }
 
   private void processProvisionData(APDU apdu) {
     byte[] buf = apdu.getBuffer();
-    if (buf[ISO7816.CLA_ISO7816] != 0
-        || buf[ISO7816.OFFSET_P1] != 0
+    if (buf[ISO7816.OFFSET_P1] != 0
         || buf[ISO7816.OFFSET_P2] != 0) {
-      ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
+      ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
     }
     short recvLen = apdu.setIncomingAndReceive();
     short dataOffset = apdu.getOffsetCdata();

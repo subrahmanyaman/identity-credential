@@ -541,7 +541,7 @@ class VerificationHelper internal constructor(
                 var apdu: ByteArray
                 try {
                     isoDep!!.connect()
-                    isoDep.timeout = 20 * 1000 // 20 seconds
+                    isoDep.timeout = 40 * 1000 // 40 seconds
                     apdu =
                         NfcUtil.createApduApplicationSelect(NfcUtil.AID_FOR_TYPE_4_TAG_NDEF_APPLICATION)
                     ret = transceive(isoDep, apdu)

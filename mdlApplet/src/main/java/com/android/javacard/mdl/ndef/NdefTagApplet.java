@@ -120,6 +120,7 @@ public class NdefTagApplet extends Applet implements ExtendedLength {
   }
 
   private void processSelect(APDU apdu) {
+    apdu.setIncomingAndReceive();
     byte[] buf = apdu.getBuffer();
     if (buf[ISO7816.OFFSET_P1] != (byte) 0x00 && buf[ISO7816.OFFSET_P2] != (byte) 0x0C) {
       ISOException.throwIt(ISO7816.SW_FUNC_NOT_SUPPORTED);

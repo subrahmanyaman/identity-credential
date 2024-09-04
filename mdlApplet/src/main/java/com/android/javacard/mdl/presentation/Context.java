@@ -52,6 +52,7 @@ public class Context {
 
   // Buffer related metadata
   public static final short MAX_BUF_SIZE = 5096;
+  public static final short MAX_CMD_DATA_RSP_DATA = 261;
   static final byte MAX_DOC_REQUESTS = 2;
 
   // Current response state
@@ -127,13 +128,16 @@ public class Context {
     }
     mDocumentsCount[0] = 0;
   }
+  
+  void setChunkSize(short chunkSize) {
+    mChunkSize[0] = chunkSize;
+  }
 
   // Context is set to outgoing i.e. response processing is started.
-  void setOutGoing(short chunkSize, short responseSize, short currentDoc) {
+  void setOutGoing(short responseSize, short currentDoc) {
     mRemainingBytes[0] = responseSize;
     // Actual chunk size is always two bytes less because the two bytes are always consumed by
     // status word.
-    mChunkSize[0] = (short) (chunkSize - 2);
     mBufReadIndex[0] = 0;
     mBufWriteIndex[0] = 0;
     mIncrementalResponseState[Context.CURRENT_STATE] = RESP_START;

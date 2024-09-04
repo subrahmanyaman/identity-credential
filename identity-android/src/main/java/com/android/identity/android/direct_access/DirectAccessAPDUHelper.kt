@@ -157,7 +157,6 @@ class DirectAccessAPDUHelper {
         bos.write(scratchpad)
         bos.write(attAppId)
         val result = bos.toByteArray()
-        println("MDOC_REQUEST:<><><============<><><>")
         print(result, 0.toShort(), result.size.toShort())
         return makeCommandApdu(bos.toByteArray())
     }

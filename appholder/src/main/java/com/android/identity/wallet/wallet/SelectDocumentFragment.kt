@@ -34,7 +34,6 @@ class SelectDocumentFragment : Fragment() {
     private val viewModel: ShareDocumentViewModel by activityViewModels()
     private val timeInterval = 2000 // # milliseconds passed between two back presses
     private var mBackPressed: Long = 0
-    private var transport: DirectAccessTransport? = null
 
     private val appPermissions: Array<String> =
         if (android.os.Build.VERSION.SDK_INT >= 31) {
@@ -52,7 +51,6 @@ class SelectDocumentFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        transport = JCardSimTransport.instance()
         // Ask to press twice before leave the app
         requireActivity().onBackPressedDispatcher.addCallback(
             this,
@@ -129,7 +127,6 @@ class SelectDocumentFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
-        transport = null
     }
 
     private fun setupDocumentsPager(binding: FragmentSelectDocumentBinding) {

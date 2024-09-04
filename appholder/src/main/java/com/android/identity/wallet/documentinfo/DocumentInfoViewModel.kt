@@ -7,6 +7,7 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.android.identity.wallet.HolderApp
 import com.android.identity.wallet.composables.toCardArt
 import com.android.identity.wallet.document.DocumentInformation
 import com.android.identity.wallet.document.DocumentManager
@@ -44,6 +45,8 @@ class DocumentInfoViewModel(
 
     fun confirmDocumentDelete() {
         documentManager.deleteCredentialByName(args.documentName)
+        // Close connection in case connection is opened during delete.
+        HolderApp.transport.closeConnection();
         _state.update { it.copy(isDeleted = true, isDeletingPromptShown = false) }
     }
 

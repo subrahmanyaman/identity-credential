@@ -133,14 +133,9 @@ class DirectAccessCredential: Credential {
     }
 
     private fun selectProvisionApplet() {
-        try {
-            val selectApdu =
-                createApduApplicationSelect(DIRECT_ACCESS_PROVISIONING_APPLET_ID)
-            val response: ByteArray = transport.sendData(selectApdu)
-            check(cborHelper.isOkResponse(response)) { "Failed to select Provision Applet" }
-        } catch (e: IOException) {
-            throw java.lang.IllegalStateException("Failed to send select Provision Applet APDU command")
-        }
+        // selectProvisionApplet happens as a part of openLogicalChannel
+        // So this call is not required.
+        // TODO Remove this method.
     }
 
     private fun createPresentationPackage(slot: Int): PresentationPackage {
@@ -210,7 +205,7 @@ class DirectAccessCredential: Credential {
         data: ByteArray,
         offset: Int,
         length: Int,
-        operation: Byte
+        operation: Byte,
     ): ByteArray? {
         val beginApdu: ByteArray = apduHelper.createProvisionSwapInApdu(
             cmd, slot, data, offset, length, operation)
@@ -348,6 +343,19 @@ class DirectAccessCredential: Credential {
             )
         } catch (e: IOException) {
             throw java.lang.IllegalStateException("Failed to provision credential data $e")
+        }
+    }
+
+    override fun delete() {
+        // TODO This function is not getting called when delete is called
+        // from select document fragment in appholder.
+        try {
+            selectProvisionApplet()
+            val apdu: ByteArray = apduHelper.deleteMDocAPDU(SLOT_0)
+            val response: ByteArray = transport.sendData(apdu)
+            cborHelper.decodeDeleteCredential(response)
+        } catch (e: IOException) {
+            throw java.lang.IllegalStateException("Failed to delete MDoc")
         }
     }
 }

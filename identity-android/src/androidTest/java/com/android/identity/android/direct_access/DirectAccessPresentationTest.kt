@@ -18,7 +18,9 @@ package com.android.identity.android.direct_access
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.android.identity.android.mdoc.deviceretrieval.IsoDepWrapper
 import com.android.identity.android.mdoc.deviceretrieval.VerificationHelper
+import com.android.identity.android.mdoc.transport.DataTransportNfc
 import com.android.identity.android.mdoc.transport.DataTransportOptions
+import com.android.identity.android.util.NfcUtil
 import com.android.identity.crypto.Certificate
 import com.android.identity.crypto.CertificateChain
 import com.android.identity.document.DocumentStore
@@ -29,6 +31,7 @@ import com.android.identity.mdoc.response.DeviceResponseParser.DeviceResponse
 import com.android.identity.util.Constants
 import com.android.identity.util.Logger
 import com.android.identity.util.Timestamp
+import java.io.ByteArrayOutputStream
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
@@ -37,7 +40,9 @@ import org.junit.runner.RunWith
 import java.io.IOException
 import java.security.KeyPair
 import java.time.Duration
+import java.util.Arrays
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class DirectAccessPresentationTest : DirectAccessTest() {
@@ -47,19 +52,6 @@ class DirectAccessPresentationTest : DirectAccessTest() {
     private var mVerificationHelper: VerificationHelper? = null
     private var mConnectionMethods: List<ConnectionMethod>? = null
     private lateinit var mDeviceResponse: ByteArray
-
-    fun hexDecode(hex: String): ByteArray {
-        require(hex.length % 2 == 0) { "Expected a string of even length" }
-        val size = hex.length / 2
-        val result = ByteArray(size)
-        for (i in 0 until size) {
-            val hi = hex[2 * i].digitToIntOrNull(16) ?: -1
-            val lo = hex[2 * i + 1].digitToIntOrNull(16) ?: -1
-            require(!(hi == -1 || lo == -1)) { "input is not hexadecimal" }
-            result[i] = (16 * hi + lo).toByte()
-        }
-        return result
-    }
 
     @Before
     fun setup() {
@@ -73,14 +65,7 @@ class DirectAccessPresentationTest : DirectAccessTest() {
 
     @After
     public override fun reset() {
-        Logger.d(TAG, "reset")
-        documentStore.deleteDocument(mDocName)
-        try {
-            mTransport.closeConnection()
-            mTransport.unInit()
-        } catch (e: IOException) {
-            Assert.fail("Unexpected Exception $e")
-        }
+        super.reset();
     }
 
     var mResponseListener: VerificationHelper.Listener = object : VerificationHelper.Listener {
@@ -130,6 +115,14 @@ class DirectAccessPresentationTest : DirectAccessTest() {
         checkSessionStatus(expectedDeviceConnectionStatus)
     }
 
+    private fun waitForResponse(expectedDeviceConnectionStatus: Int, timeInSeconds: Long) {
+        try {
+            mCountDownLatch!!.await(timeInSeconds, TimeUnit.SECONDS)
+        } catch (e: InterruptedException) {
+            // do nothing
+        }
+    }
+
     private fun checkSessionStatus(expectedDeviceStatus: Int) {
         Assert.assertEquals(
             "Device connection status ",
@@ -158,7 +151,7 @@ class DirectAccessPresentationTest : DirectAccessTest() {
     private fun provisionAndSwapIn() {
         val challenge = "challenge".toByteArray()
         val document = documentStore.createDocument(mDocName)
-        val pendingCredential = DirectAccessCredential(
+        pendingCredential = DirectAccessCredential(
             document,
             null,
             CREDENTIAL_DOMAIN,
@@ -195,6 +188,7 @@ class DirectAccessPresentationTest : DirectAccessTest() {
     fun testPresentation() {
         generateReaderCerts(true)
         provisionAndSwapIn()
+        mTransport.closeConnection()
         val builder = VerificationHelper.Builder(
             context, mResponseListener,
             context.mainExecutor
@@ -239,6 +233,7 @@ class DirectAccessPresentationTest : DirectAccessTest() {
         DirectAccessTestUtils().validateMdocResponse(dr, entries)
         resetLatch()
         mVerificationHelper!!.disconnect()
+        waitForResponse(DEVICE_CONNECT_STATUS_DISCONNECTED, 60 /* 1 minute */)
     }
 
     companion object {

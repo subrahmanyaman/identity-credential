@@ -47,16 +47,64 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Timer
+import java.util.TimerTask
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import kotlin.random.Random
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 class ProvisioningUtil private constructor(
     private val context: Context,
 ) {
-
+    private val SERVICE_CONNECTION_TIME_OUT: Long = 3000
+    private val lock = ReentrantLock()
+    private lateinit var connectionTimer: Timer
+    private val mTimerTask = ServiceConnectionTimerTask()
+    private val condition = lock.newCondition()
+    private var connected = false
     val secureAreaRepository = SecureAreaRepository()
     val documentStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        HolderApp.createDocumentStore(context, secureAreaRepository)
+        HolderApp.createDocumentStore(context, secureAreaRepository, mCallback)
     }
+
+    internal inner class ServiceConnectionTimerTask : TimerTask() {
+        override fun run() {
+            lock.withLock { condition.signalAll() }
+        }
+    }
+
+    val mCallback = object : HolderApp.SEListener {
+        override fun onConnected() {
+            lock.withLock {
+                connected = true
+                condition.signal()
+            }
+        }
+    }
+
+    fun waitForSEConnection() {
+        lock.withLock {
+            if (!connected) {
+                try {
+                    condition.await()
+                } catch (e: InterruptedException) {
+                    e.printStackTrace()
+                }
+            }
+            if (!connected) {
+                throw TimeoutException(
+                    "Service could not be connected after SERVICE_CONNECTION_TIME_OUT ms"
+                )
+            }
+            if (connectionTimer != null) {
+                connectionTimer!!.cancel()
+            }
+        }
+    }
+
 
     private fun ProvisionInfo.documentName(): String {
         val regex = Regex("[^A-Za-z0-9 ]")
@@ -95,6 +143,10 @@ class ProvisioningUtil private constructor(
 
         // Create initial batch of credentials
         if (PreferencesHelper.isDirectAccessDemoEnabled()) {
+            connectionTimer = Timer()
+            connectionTimer.schedule(mTimerTask, SERVICE_CONNECTION_TIME_OUT)
+            // TODO Check if below method has to be run from a thread.
+            waitForSEConnection();
             refreshDaCredentials(document, provisionInfo.docType)
         }
         refreshMdocCredentials(document, provisionInfo.docType)
@@ -369,6 +421,7 @@ class ProvisioningUtil private constructor(
             )
         }
         lastCertified?.swapIn()
+        document.directAccessTransport?.closeConnection();
     }
 
     // Puts the string "MSO ${counter}" on top of the portrait image.

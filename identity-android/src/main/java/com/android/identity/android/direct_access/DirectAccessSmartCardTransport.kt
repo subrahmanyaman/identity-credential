@@ -40,9 +40,11 @@ class DirectAccessSmartCardTransport : DirectAccessTransport {
 
     @Throws(IOException::class)
     override fun openConnection() {
-        if (isConnected) {
-            instance()!!.reset()
+        if (!isInitialized) {
+            init()
         }
+        var aid = AIDUtil.create(ProvisioningApplet.DIRECT_ACCESS_PROVISIONING_APPLET_ID)
+        select(aid)
     }
 
     @Throws(IOException::class)
@@ -79,7 +81,6 @@ class DirectAccessSmartCardTransport : DirectAccessTransport {
 
     @Throws(IOException::class)
     override fun closeConnection() {
-        mJCardSim!!.reset()
     }
 
     override val isConnected: Boolean
