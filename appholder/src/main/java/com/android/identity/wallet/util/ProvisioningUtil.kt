@@ -36,6 +36,7 @@ import com.android.identity.util.Timestamp
 import com.android.identity.wallet.HolderApp
 import com.android.identity.wallet.document.DocumentInformation
 import com.android.identity.wallet.document.KeysAndCertificates
+import com.android.identity.wallet.document.OmapiTransport
 import com.android.identity.wallet.selfsigned.ProvisionInfo
 import com.android.identity.wallet.support.SecureAreaSupport
 import com.android.identity.wallet.util.DocumentData.MICOV_DOCTYPE
@@ -143,10 +144,12 @@ class ProvisioningUtil private constructor(
 
         // Create initial batch of credentials
         if (PreferencesHelper.isDirectAccessDemoEnabled()) {
-            connectionTimer = Timer()
-            connectionTimer.schedule(mTimerTask, SERVICE_CONNECTION_TIME_OUT)
-            // TODO Check if below method has to be run from a thread.
-            waitForSEConnection();
+            if (OmapiTransport::class.isInstance(HolderApp.transport)) {
+                connectionTimer = Timer()
+                connectionTimer.schedule(mTimerTask, SERVICE_CONNECTION_TIME_OUT)
+                // TODO Check if below method has to be run from a thread.
+                waitForSEConnection();
+            }
             refreshDaCredentials(document, provisionInfo.docType)
         }
         refreshMdocCredentials(document, provisionInfo.docType)

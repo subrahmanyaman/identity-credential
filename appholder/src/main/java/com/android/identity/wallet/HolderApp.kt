@@ -102,7 +102,10 @@ class HolderApp: Application() {
             credentialFactory.addCredentialImplementation(MdocCredential::class)
             credentialFactory.addCredentialImplementation(DirectAccessCredential::class)
             // TODO Make UX changes to select transport - JCardSimTransport / OMAPITransport
-            transport = OmapiTransport.instance(context, callback).getDirectAccessOmapiTransport();
+            // When testing on Real secure element, OmapiTransport is to be used.
+            // When testing on JCardSimulator, JCardSimTransport is to be used.
+//          transport = .instance(context, callback).getDirectAccessOmapiTransport();
+            transport = JCardSimTransport.instance();
             return DocumentStore(
                 storageEngine,
                 secureAreaRepository,
