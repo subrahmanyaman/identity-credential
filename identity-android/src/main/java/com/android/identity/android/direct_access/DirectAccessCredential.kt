@@ -26,6 +26,7 @@ import com.android.identity.crypto.X509CertChain
 import com.android.identity.document.Document
 import com.android.identity.document.DocumentStore
 import com.android.identity.securearea.KeyAttestation
+import com.android.identity.util.Logger
 import kotlinx.datetime.Instant
 
 /**
@@ -82,6 +83,22 @@ import kotlinx.datetime.Instant
 class DirectAccessCredential: Credential {
     companion object {
         private const val TAG = "DirectAccessCredential"
+
+        suspend fun create(
+            document: Document,
+            asReplacementForIdentifier: String?,
+            domain: String,
+            docType: String
+        ): DirectAccessCredential {
+            return DirectAccessCredential(
+                document,
+                asReplacementForIdentifier,
+                domain,
+                docType
+            ).apply {
+                addToDocument()
+            }
+        }
     }
 
     /**
@@ -95,7 +112,7 @@ class DirectAccessCredential: Credential {
      * @param documentSlot the slot in the Direct Access applet that the document
      *      associated with this credential is stored in
      */
-    constructor(
+    private constructor(
         document: Document,
         asReplacementForIdentifier: String?,
         domain: String,
@@ -108,6 +125,8 @@ class DirectAccessCredential: Credential {
             "To use DirectAccessCredential, document's metadata must implement DirectAccessDocumentMetadata"
         }
         val documentSlot = metadata.directAccessDocumentSlot
+        Logger.d(TAG, "$documentSlot")
+
         DirectAccess.createCredential(documentSlot).let {
             signingCert = it.first
             encryptedPresentationData = it.second

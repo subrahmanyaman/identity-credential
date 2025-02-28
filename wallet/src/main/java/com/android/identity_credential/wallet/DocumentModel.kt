@@ -710,18 +710,20 @@ class DocumentModel(
     }
 
     private suspend fun syncDocumentWithIssuerCore(document: Document) {
-        Logger.i(TAG, "syncDocumentWithIssuer: Refreshing ${document.identifier}")
+        Logger.d(TAG, "syncDocumentWithIssuer: Refreshing ${document.identifier}")
         val metadata = document.walletDocumentMetadata
         val issuer = walletServerProvider.getIssuingAuthority(document.issuingAuthorityIdentifier)
 
         // Download latest issuer configuration.
         metadata.setIssuingAuthorityConfiguration(issuer.getConfiguration())
 
+        Logger.d(TAG, "refreshState")
         // OK, let's see what's new...
         metadata.refreshState(walletServerProvider)
 
         // It's possible the document was remote deleted...
         if (document.state!!.condition == DocumentCondition.NO_SUCH_DOCUMENT) {
+            Logger.d(TAG, "NO_SUCH_DOCUMENT")
             Logger.i(TAG, "syncDocumentWithIssuer: ${document.identifier} was deleted")
             walletApplication.postNotificationForDocument(
                 document,
@@ -735,7 +737,7 @@ class DocumentModel(
 
         // It's possible a new configuration is available...
         if (document.state!!.condition == DocumentCondition.CONFIGURATION_AVAILABLE) {
-            Logger.i(TAG, "syncDocumentWithIssuer: ${document.identifier} has a new configuration")
+            Logger.d(TAG, "syncDocumentWithIssuer: ${document.identifier} has a new configuration")
 
             // New configuration (= PII) is available, nuke all existing credentials
             //
@@ -747,7 +749,7 @@ class DocumentModel(
             if (document.numDocumentConfigurationsDownloaded == 0L) {
                 if (document.documentConfiguration.directAccessConfiguration != null) {
                     document.walletDocumentMetadata.setDocumentSlot(
-                        DirectAccess.allocateDocumentSlot()
+                        DirectAccess.allocateDocumentSlot(document.documentConfiguration.mdocConfiguration!!.docType)
                     )
                 }
                 walletApplication.postNotificationForDocument(
@@ -772,9 +774,11 @@ class DocumentModel(
         // If the document is in the READY state, we can request credentials. See if we need
         // to do that.
         if (document.state!!.condition == DocumentCondition.READY) {
+            Logger.d(TAG, "DocumentCondition.READY");
             val docConf = document.documentConfiguration
 
             if (docConf.mdocConfiguration != null) {
+                Logger.d(TAG, "docConf.mdocConfiguration != null");
                 refreshCredentials(
                     issuer,
                     document,
@@ -793,13 +797,14 @@ class DocumentModel(
             }
 
             if (docConf.directAccessConfiguration != null) {
+                Logger.d(TAG, "docConf.directAccessConfiguration != null");
                 refreshCredentials(
                     issuer,
                     document,
                     WalletApplication.CREDENTIAL_DOMAIN_DIRECT_ACCESS,
                     CredentialFormat.DirectAccess
                 ) { credentialToReplace, credentialDomain, secureArea, createKeySettings ->
-                    DirectAccessCredential(
+                    DirectAccessCredential.create(
                         document,
                         credentialToReplace,
                         credentialDomain,
@@ -810,6 +815,7 @@ class DocumentModel(
 
             val configuration = docConf.sdJwtVcDocumentConfiguration
             if (configuration != null && configuration.keyBound != false) {
+                Logger.d(TAG, "configuration != null && configuration.keyBound != false");
                 refreshCredentials(
                     issuer,
                     document,
@@ -827,7 +833,7 @@ class DocumentModel(
                 }
             }
         }
-
+        Logger.d(TAG, "refreshState - 2")
         // It's possible the request credentials have already been minted..
         metadata.refreshState(walletServerProvider)
 
@@ -835,7 +841,11 @@ class DocumentModel(
         var lastCertified: DirectAccessCredential? = null
         var numCredentialsRefreshed = 0
         if (document.state!!.numAvailableCredentials > 0) {
+            Logger.d(TAG, "document.state!!.numAvailableCredentials > 0 ${document.state!!.numAvailableCredentials}")
+            var count_test : Int = 0;
             for (credentialData in issuer.getCredentials(document.documentIdentifier)) {
+                Logger.d(TAG, "in loop $count_test")
+                count_test++;
                 val pendingCredential = if (credentialData.secureAreaBoundKey == null) {
                     // Keyless credential
                     KeylessSdJwtVcCredential.create(
@@ -858,6 +868,7 @@ class DocumentModel(
                     Logger.w(TAG, "No pending Credential for pubkey ${credentialData.secureAreaBoundKey}")
                     continue
                 }
+                Logger.d(TAG, "certify");
                 pendingCredential.certify(
                     credentialData.data,
                     credentialData.validFrom,
@@ -868,6 +879,7 @@ class DocumentModel(
                     lastCertified = pendingCredential
                 }
             }
+            Logger.d(TAG, "setAsActiveCredential");
             lastCertified?.setAsActiveCredential()
             metadata.refreshState(walletServerProvider)
         }
@@ -885,7 +897,9 @@ class DocumentModel(
             createKeySettings: CreateKeySettings,
                 ) -> Credential
     ) {
+        Logger.d(TAG, "refreshCredentials")
         val numCreds = document.issuingAuthorityConfiguration.numberOfCredentialsToRequest ?: 3
+        Logger.d(TAG, "refreshCredentials numCerds: $numCreds")
         val minValidTimeMillis = document.issuingAuthorityConfiguration.minCredentialValidityMillis ?: (30 * 24 * 3600L)
         val maxUsesPerCredential = document.issuingAuthorityConfiguration.maxUsesPerCredentials ?: 1
 
@@ -901,10 +915,12 @@ class DocumentModel(
             minValidTimeMillis,
             true
         )
+        Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate: $numPendingCredentialsToCreate")
         if (numPendingCredentialsToCreate > 0) {
+            Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0")
             val requestCredentialsFlow = issuer.requestCredentials(document.documentIdentifier)
             val credConfig = requestCredentialsFlow.getCredentialConfiguration(credentialFormat)
-
+            Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0 step1")
             val secureAreaConfiguration = credConfig.secureAreaConfiguration
             val (secureArea, authKeySettings) = when (secureAreaConfiguration) {
                 is SecureAreaConfigurationSoftware -> Pair(
@@ -926,6 +942,7 @@ class DocumentModel(
                         .build()
                 )
             }
+            Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0 step2")
             DocumentUtil.managedCredentialHelper(
                 document,
                 credentialDomain,
@@ -943,9 +960,13 @@ class DocumentModel(
                 minValidTimeMillis,
                 false
             )
+            Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0 step3")
             val credentialRequests = mutableListOf<CredentialRequest>()
             val pendingCredentials = document.getPendingCredentials()
+            var count : Int = 0;
             for (pendingCredential in pendingCredentials) {
+                Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate loop $count")
+                count++
                 credentialRequests.add(
                     CredentialRequest(
                         if (pendingCredential is DirectAccessCredential) {
@@ -956,6 +977,7 @@ class DocumentModel(
                     )
                 )
             }
+            Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0 step4")
             val keysAssertion = if (credConfig.keyAssertionRequired) {
                 walletServerProvider.assertionMaker.makeDeviceAssertion { clientId ->
                     AssertionBindingKeys(
@@ -972,15 +994,19 @@ class DocumentModel(
             } else {
                 null
             }
+            Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0 step5")
             val challenges = requestCredentialsFlow.sendCredentials(
                 credentialRequests = credentialRequests,
                 keysAssertion = keysAssertion
             )
+            Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0 step6")
             if (challenges.isNotEmpty()) {
+                Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0 step7")
                 val activity = this.activity!!
                 if (challenges.size != pendingCredentials.size) {
                     throw IllegalStateException("Unexpected number of possession challenges")
                 }
+                Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0 step8")
                 val possessionProofs = mutableListOf<KeyPossessionProof>()
                 withContext(Dispatchers.Main) {
                     for (credData in pendingCredentials.zip(challenges)) {
@@ -998,8 +1024,10 @@ class DocumentModel(
                         possessionProofs.add(KeyPossessionProof(signature))
                     }
                 }
+                Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0 step9")
                 requestCredentialsFlow.sendPossessionProofs(possessionProofs)
             }
+            Logger.d(TAG, "refreshCredentials - numPendingCredentialsToCreate > 0 step10")
             requestCredentialsFlow.complete()  // noop for local, but important for server-side IA
         }
     }
