@@ -16,6 +16,7 @@ val projectVersionName: String by extra {
     rootProject.exec {
         commandLine("git", "describe", "--tags", "--dirty")
         standardOutput = stdout
+        setIgnoreExitValue(true)
     }
     stdout.toString().trim()
 }

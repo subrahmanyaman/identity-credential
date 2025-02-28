@@ -44,6 +44,7 @@ import kotlin.time.Duration.Companion.days
 object DirectAccess {
 
     private const val TAG = "DirectAccess"
+    private const val MDL_DOC_TYPE = "org.iso.18013.5.1.mDL"
     private const val PROVISION_BEGIN: Byte = 0
     private const val PROVISION_UPDATE: Byte = 1
     private const val PROVISION_FINISH: Byte = 2
@@ -182,12 +183,16 @@ object DirectAccess {
      * Allocates space (a slot) in the Direct Access applet for a
      * document to be provisioned to.
      *
+     * @param docType doc type of the document.
      * @return ID of the allocated slot, -1 if no slot is available
      */
-    fun allocateDocumentSlot(): Int {
+    fun allocateDocumentSlot(docType: String): Int {
         val apdu: ByteArray?
         val response: ByteArray?
+        check(docType.compareTo(MDL_DOC_TYPE) == 0) { "Given docType '$docType' != '$MDL_DOC_TYPE'" }
+        Logger.d(TAG, "allocateDocumentSlot Start")
         try {
+            Logger.d(TAG, "allocateDocumentSlot debug1")
             transport.closeConnection()
             transport.openConnection()
 
@@ -196,17 +201,25 @@ object DirectAccess {
             // set instruction
             setShort(scratchpad, 0, CMD_MDOC_CREATE.toShort())
             bos.write(scratchpad)
+            setShort(scratchpad, 0, docType.length.toShort())
+            bos.write(scratchpad)
+            bos.write(docType.toByteArray())
             apdu = makeCommandApdu(bos.toByteArray())
-
+            Logger.d(TAG, "allocateDocumentSlot debug2")
             response = transport.sendData(apdu)
+            Logger.d(TAG, "allocateDocumentSlot debug3")
             check(response.size == 3) {
                 "allocateDocumentSlot APDU response size != 3"
             }
+            Logger.d(TAG, "allocateDocumentSlot debug4")
             check(getAPDUResponseStatus(response) == APDU_RESPONSE_STATUS_OK)
+            Logger.d(TAG, "allocateDocumentSlot debug5 ${response[0].toInt()}")
             return response[0].toInt()
         } catch (e: IOException) {
+            Logger.d(TAG, "allocateDocumentSlot debug6")
             throw java.lang.IllegalStateException("Failed to send createCredential APDU command")
         } finally {
+            Logger.d(TAG, "allocateDocumentSlot debug7")
             transport.closeConnection()
         }
     }
@@ -220,10 +233,12 @@ object DirectAccess {
     fun clearDocumentSlot(
         documentSlot: Int
     ): Boolean {
+        Logger.d(TAG, "clearDocumentSlot start $documentSlot")
         check(documentSlot in 0..127) {
             "documentSlot is out of the valid range (0-127)."
         }
         try {
+            Logger.d(TAG, "clearDocumentSlot start debug1")
             transport.closeConnection()
             transport.openConnection()
 
@@ -233,18 +248,24 @@ object DirectAccess {
             bos.write(scratchpad)
             bos.write(documentSlot)
             val apdu = makeCommandApdu(bos.toByteArray())
+            Logger.d(TAG, "clearDocumentSlot start debug2")
 
             val response: ByteArray = transport.sendData(apdu)
+            Logger.d(TAG, "clearDocumentSlot start debug3")
             val status = getAPDUResponseStatus(response)
+            Logger.d(TAG, "clearDocumentSlot start debug4")
             if (APDU_RESPONSE_STATUS_OK != status) {
                 Logger.i(TAG, "clearDocumentSlot failed. Response status: $status")
                 return false
             }
+            Logger.d(TAG, "clearDocumentSlot start debug5")
             return true
         } catch (e: IOException) {
+            Logger.d(TAG, "clearDocumentSlot start debug6")
             Logger.i(TAG, "Failed to delete MDoc")
             return false
         } finally {
+            Logger.d(TAG, "clearDocumentSlot start debug7")
             transport.closeConnection()
         }
     }
@@ -300,6 +321,7 @@ object DirectAccess {
     ): Pair<X509CertChain, ByteArray> {
         val response: ByteArray?
         try {
+            Logger.d(TAG, "createCredential start debug1 $documentSlot")
             transport.closeConnection()
             transport.openConnection()
 
@@ -325,16 +347,20 @@ object DirectAccess {
             bos.write(scratchpad)
             bos.write(notAfterBytes)
             val apdu = makeCommandApdu(bos.toByteArray())
+            Logger.d(TAG, "createCredential start debug2")
 
             response = transport.sendData(apdu)
+            Logger.d(TAG, "createCredential start debug3")
             val status = getAPDUResponseStatus(response)
             check(APDU_RESPONSE_STATUS_OK == status) {
                 "createPresentationPackage failed. Response status: $status" }
+            Logger.d(TAG, "createCredential start debug4")
             val input = response.copyOf(response.size - 2)
-
+            Logger.d(TAG, "createCredential start debug5")
             var signingCert: X509CertChain? = null
             var encryptedData: ByteArray? = null
             val map = decode(input)
+            Logger.d(TAG, "createCredential start debug6")
             val keys = map.asMap.keys
             for (keyItem in keys) {
                 val value = keyItem.asNumber.toInt()
@@ -351,11 +377,13 @@ object DirectAccess {
                     else -> throw IllegalStateException("createPresentationPackage unknown key item")
                 }
             }
+            Logger.d(TAG, "createCredential start debug7")
             return Pair(signingCert!!, encryptedData!!)
         } catch (e: IOException) {
             Logger.d(TAG, "Failed to create presentation package")
             throw java.lang.IllegalStateException("Failed to create presentation package", e)
         } finally {
+            Logger.d(TAG, "createCredential start debug8")
             transport.closeConnection()
         }
     }
