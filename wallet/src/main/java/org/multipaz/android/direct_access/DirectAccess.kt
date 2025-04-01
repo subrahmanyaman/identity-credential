@@ -483,7 +483,7 @@ object DirectAccess {
             transport.openConnection()
             val bos = ByteArrayOutputStream()
             // set instruction
-            bos.write(buildByteString {appendUInt16(CMD_MDOC_GET_INFORMATION)}.toByteArray())
+            bos.write(buildByteString { appendUInt16(CMD_MDOC_GET_INFORMATION) }.toByteArray())
             bos.write(documentSlot)
             apdu = makeCommandApdu(bos.toByteArray())
 
@@ -519,7 +519,7 @@ object DirectAccess {
             transport.openConnection()
             val bos = ByteArrayOutputStream()
             // set instruction
-            bos.write(buildByteString {appendUInt16(CMD_MDOC_CLEAR_USAGE_COUNT)}.toByteArray())
+            bos.write(buildByteString { appendUInt16(CMD_MDOC_CLEAR_USAGE_COUNT) }.toByteArray())
             bos.write(documentSlot)
             apdu = makeCommandApdu(bos.toByteArray())
 
