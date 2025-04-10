@@ -79,6 +79,7 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
   public static final byte CMD_MDOC_SELECT = 10;
   public static final byte CMD_MDOC_GET_INFORMATION = 11;
   public static final byte CMD_MDOC_CLEAR_USAGE_COUNT = 12;
+  public static final byte CMD_MDOC_ENUMERATE_SLOTS = 13;
   public static final byte BEGIN = 0;
   public static final byte UPDATE = 1;
   public static final byte FINISH = 2;
@@ -481,6 +482,36 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
         doc.clearUsageCount();
         break;
       }
+      case CMD_MDOC_ENUMERATE_SLOTS:
+      {
+        byte slot = 0;
+        MDoc doc;
+        short encodedSlotsLen = 0;
+        short allocatedSlots = 0;
+        short maxResponseSize =
+                (short) (MAX_DOCUMENTS_SLOTS * 2 /* Uint header(1) + byte value(1) */);
+        // Reserve first 2 bytes for the array header.
+        mEncoder.init(buf, (short) 2, maxResponseSize);
+        for (; slot < MAX_DOCUMENTS_SLOTS; ++slot) {
+          doc = mDocuments[slot];
+          if (doc.isReserved()) {
+            encodedSlotsLen += mEncoder.encodeUInt8(slot);
+            allocatedSlots++;
+          }
+        }
+        mEncoder.reset();
+        //Encoder array header starting at 0
+        mEncoder.init(buf, (short) 0, (short) 2);
+        short arrHeaderLen = mEncoder.startArray(allocatedSlots);
+        if (arrHeaderLen > 2) {
+          ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+        } else if (arrHeaderLen == 1) {
+          // Move the encoded slots to the end of the array header.
+          Util.arrayCopyNonAtomic(buf, (short) 2, buf, arrHeaderLen, encodedSlotsLen);
+        }
+        sendApdu(apdu, (short) 0, (short) (arrHeaderLen + encodedSlotsLen));
+        break;
+      }
       case CMD_MDOC_PROVISION_DATA:
         {
           // [byte slot, byte op, short provDataLen, byte[] provDataLen]
@@ -763,16 +794,15 @@ public class ProvisioningApplet extends Applet implements ExtendedLength {
         break;
       }
     }
-    if (slot == MAX_DOCUMENTS_SLOTS) {
+    if (slot < MAX_DOCUMENTS_SLOTS) {
+      createDocument(doc, false, mScratch, (short) 0, (short) mScratch.length, docType,
+              docTypeStart, docTypeLen);
+      mContext[CTX_STATUS] = 0;
+    } else {
       // no slots available
-      ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+      slot = -1;
     }
-    byte[] apduBuf = apdu.getBuffer();
-    Util.arrayCopyNonAtomic(docType, docTypeStart, apduBuf, (short) 0, docTypeLen);
-    createDocument(doc, false, mScratch, (short) 0, (short) mScratch.length, apduBuf,
-            (short) 0, docTypeLen);
-    mContext[CTX_STATUS] = 0;
-    apduBuf[0] = slot;
+    heap[0] = slot;
     sendApdu(apdu, (short) 0, (short) 1);
   }
 

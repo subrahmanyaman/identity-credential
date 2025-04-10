@@ -41,8 +41,6 @@ import org.bouncycastle.operator.ContentSigner
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import org.junit.After
 import org.junit.Assert
-import org.junit.Assume.assumeTrue
-import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.multipaz.cbor.Bstr
@@ -51,7 +49,6 @@ import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
-import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.context.initializeApplication
@@ -218,10 +215,10 @@ class DirectAccessTest {
             DirectAccessSmartCardTransport.openConnection()
 
             // Todo uncomment once enumerateAllocatedSlots is implemented
-//        // Delete all slots to reset applet state.
-//        for (slot in DirectAccess.enumerateAllocatedSlots()) {
-//            DirectAccess.clearDocumentSlot(slot)
-//        }
+        // Delete all slots to reset applet state.
+        for (slot in DirectAccess.enumerateAllocatedSlots()) {
+            DirectAccess.clearDocumentSlot(slot)
+        }
 
             try {
                 DirectAccessSmartCardTransport.closeConnection()
@@ -231,14 +228,13 @@ class DirectAccessTest {
         }
     }
 
-    @Ignore("enumerateAllocatedSlots needs to be implemented")
     @Test
     fun testAllocateAndClearDocumentSlot() {
         // First try allocating a single slot.
         Assert.assertEquals(0, DirectAccess.enumerateAllocatedSlots().size)
         val singleSlot = DirectAccess.allocateDocumentSlot(MDL_DOC_TYPE)
         Assert.assertEquals(1, DirectAccess.enumerateAllocatedSlots().size)
-        Assert.assertEquals(1, DirectAccess.enumerateAllocatedSlots()[0])
+        Assert.assertEquals(singleSlot, DirectAccess.enumerateAllocatedSlots()[0])
 
         // And deleting that single slot.
         Assert.assertTrue(DirectAccess.clearDocumentSlot(singleSlot))
