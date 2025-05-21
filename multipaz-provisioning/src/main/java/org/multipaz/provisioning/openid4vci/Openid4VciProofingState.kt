@@ -3,7 +3,7 @@ package org.multipaz.provisioning.openid4vci
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
-import org.multipaz.device.AssertionDPoPKey
+import org.multipaz.device.AssertionPoPKey
 import org.multipaz.device.DeviceAssertionMaker
 import org.multipaz.rpc.annotation.RpcState
 import org.multipaz.rpc.backend.Configuration
@@ -13,7 +13,7 @@ import org.multipaz.provisioning.ApplicationSupport
 import org.multipaz.provisioning.IssuingAuthorityException
 import org.multipaz.provisioning.Proofing
 import org.multipaz.provisioning.WalletApplicationCapabilities
-import org.multipaz.provisioning.WalletServerSettings
+import org.multipaz.provisioning.ProvisioningBackendSettings
 import org.multipaz.provisioning.evidence.EvidenceRequest
 import org.multipaz.provisioning.evidence.EvidenceRequestMessage
 import org.multipaz.provisioning.evidence.EvidenceRequestNotificationPermission
@@ -249,7 +249,7 @@ class Openid4VciProofingState(
 
     private suspend fun getCloudSecureAreaId(): String {
         val cloudSecureAreaUrl = URLEncoder.encode(
-            WalletServerSettings(BackendEnvironment.getInterface(Configuration::class)!!)
+            ProvisioningBackendSettings(BackendEnvironment.getInterface(Configuration::class)!!)
                 .cloudSecureAreaUrl, "UTF-8"
         )
         return "CloudSecureArea?id=${documentId}&url=$cloudSecureAreaUrl"
@@ -412,7 +412,7 @@ class Openid4VciProofingState(
             applicationSupport.createJwtClientAssertion(
                 clientKeyInfo.attestation,
                 assertionMaker.makeDeviceAssertion {
-                    AssertionDPoPKey(
+                    AssertionPoPKey(
                         clientKeyInfo.publicKey,
                         credentialIssuerUri
                     )

@@ -42,6 +42,7 @@ import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.datetime.Clock
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -73,6 +74,8 @@ internal suspend fun digitalCredentialsPresentment(
         trustPoint: TrustPoint?
     ) -> Boolean
 ) {
+    Logger.i(TAG, "mechanism.protocol: ${mechanism.protocol}")
+    Logger.i(TAG, "mechanism.request: ${mechanism.request}")
     dismissable.value = false
     try {
         when (mechanism.protocol) {
@@ -294,9 +297,11 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
         preReq
     }
 
+    Logger.iJson(TAG, "request", req)
+
     val nonce = req["nonce"]!!.jsonPrimitive.content
     val responseMode = req["response_mode"]!!.jsonPrimitive.content
-    if (!(responseMode == "dc_api" || responseMode == "dc_api.jwt")) {
+    if (!(responseMode == "dc_api" || responseMode == "dc_api.jwt" || responseMode == "direct_post.jwt")) {
         // TODO: in the future, flat out reject requests that doesn't use encrypted response
         throw IllegalArgumentException("Unexpected response_mode $responseMode")
     }
@@ -340,13 +345,13 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
     var reEncAlg: Algorithm = Algorithm.UNSET
     val reReaderPublicKey: EcPublicKey? = when (responseMode) {
         "dc_api" -> null
-        "dc_api.jwt" -> {
+        "dc_api.jwt", "direct_post.jwt" -> {
             val clientMetadata = req["client_metadata"]!!.jsonObject
-            val reAlg = clientMetadata["authorization_encrypted_response_alg"]!!.jsonPrimitive.content
+            val reAlg = clientMetadata["authorization_encrypted_response_alg"]?.jsonPrimitive?.content ?: "ECDH-ES"
             if (reAlg != "ECDH-ES") {
                 throw IllegalStateException("Only ECDH-ES is supported for authorization_encrypted_response_alg")
             }
-            val reEnc = clientMetadata["authorization_encrypted_response_enc"]!!.jsonPrimitive.content
+            val reEnc = clientMetadata["authorization_encrypted_response_enc"]?.jsonPrimitive?.content ?: "A128GCM"
             reEncAlg = when (reEnc) {
                 "A128GCM" -> Algorithm.A128GCM
                 "A192GCM" -> Algorithm.A192GCM
@@ -412,6 +417,7 @@ private suspend fun digitalCredentialsOpenID4VPProtocol(
             put(dcqlId, response)
         }
     }
+    Logger.iJson(TAG, "vpToken", vpToken)
 
     val walletGeneratedNonce = Random.nextBytes(16).toBase64Url()
     val responseJson = if (reReaderPublicKey != null) {
@@ -567,16 +573,13 @@ private suspend fun openID4VPSdJwt(
     // TODO: handle multiple VCT values...
     val vct = vctValues[0].jsonPrimitive.content
 
-    val requestedData = mutableMapOf<String, MutableList<Pair<String, Boolean>>>()
-
     val requestedClaims = mutableListOf<VcRequestedClaim>()
     val claims = credential["claims"]!!.jsonArray
     val documentType = documentTypeRepository.getDocumentTypeForVc(vct)
     for (n in 0 until claims.size) {
         val claim = claims[n].jsonObject
         val path = claim["path"]!!.jsonArray
-        // TODO: support path with more than one element
-        val claimName = path.get(0).jsonPrimitive.content
+        val claimName = path.joinToString(separator = ".") { it.jsonPrimitive.content }
         val attribute = documentType?.vcDocumentType?.claims?.get(claimName)
         requestedClaims.add(
             VcRequestedClaim(

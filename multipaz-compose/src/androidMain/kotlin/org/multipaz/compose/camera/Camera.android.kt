@@ -1,81 +1,153 @@
 package org.multipaz.compose.camera
 
-import android.content.Context
+import android.util.Size
+import androidx.annotation.OptIn
+import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.CameraSelector as XCameraSelector
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
-import androidx.camera.core.UseCase
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.camera.view.TransformExperimental
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.graphics.setFrom
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import org.multipaz.context.applicationContext
-import org.multipaz.util.Logger
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
 
+private const val TAG = "Camera"
 
+@OptIn(TransformExperimental::class)
 @Composable
 actual fun Camera(
-    cameraSelector: CameraSelector,
-    modifier: Modifier
+    modifier: Modifier,
+    cameraSelection: CameraSelection,
+    captureResolution: CameraCaptureResolution,
+    showCameraPreview: Boolean,
+    onFrameCaptured: suspend (frame: CameraFrame) -> Unit
 ) {
-    val TAG = "Camera"
-    val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
+    val executor = remember { Executors.newSingleThreadExecutor() }
+    val previewView = remember { mutableStateOf<PreviewView?>(if (showCameraPreview) PreviewView(context) else null) }
 
-    val preview = Preview.Builder().build()
-    val previewView = remember {
-        PreviewView(context)
-    }
-
-    //TODO: The actual image analysis will be added later (the API specification is in progress of definition).
-    val imageAnalysis = ImageAnalysis.Builder()
-        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-        .build()
-    imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(applicationContext)) { imageProxy ->
-        Logger.d(TAG, "Got image ${imageProxy.width} ${imageProxy.height} ${imageProxy.imageInfo}")
-        imageProxy.close()
-    }
-
-    val useCases = mutableListOf<UseCase>()
-    useCases.add(preview)
-    useCases.add(imageAnalysis)
-
-    val cameraSelection = XCameraSelector.Builder()
-        .apply {
-            when (cameraSelector) {
-                CameraSelector.DEFAULT_FRONT_CAMERA -> requireLensFacing(XCameraSelector.LENS_FACING_FRONT)
-                CameraSelector.DEFAULT_BACK_CAMERA -> requireLensFacing(XCameraSelector.LENS_FACING_BACK)
-            }
+    DisposableEffect(cameraSelection) {
+        var preview: Preview? = null
+        if (showCameraPreview) {
+            preview = Preview.Builder().build()
+            // COMPATIBLE is needed b/c we're using `outputTransform.matrix`
+            previewView.value!!.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+            preview.setSurfaceProvider(previewView.value!!.surfaceProvider)
         }
-        .build()
-    LaunchedEffect(cameraSelection) {
-        val cameraProvider = context.getCameraProvider()
-        cameraProvider.unbindAll()
-        cameraProvider.bindToLifecycle(
-            lifecycleOwner,
-            cameraSelection,
-            *useCases.toTypedArray()
+
+        val cameraProvider = cameraProviderFuture.get()
+
+        val resolutionStrategy = ResolutionStrategy(
+            captureResolution.getDimensions(),
+            ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER
         )
-        preview.setSurfaceProvider(previewView.surfaceProvider)
+        val resolutionSelector = ResolutionSelector.Builder()
+            .setResolutionStrategy(resolutionStrategy)
+            .build()
+
+        val imageAnalysis = ImageAnalysis.Builder()
+            .setResolutionSelector(resolutionSelector)
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+            .build()
+
+        imageAnalysis.setAnalyzer(executor) { imageProxy ->
+            runBlocking {
+                val transformationProxy = if (showCameraPreview) {
+                    withContext(Dispatchers.Main) {
+                        getCorrectionMatrix(imageProxy, previewView.value!!)
+                    }
+                } else {
+                    Matrix()
+                }
+                val frame = CameraFrame(
+                    cameraImage = CameraImage(imageProxy),
+                    width = imageProxy.width,
+                    height = imageProxy.height,
+                    previewTransformation = transformationProxy
+                )
+                onFrameCaptured(frame)
+            }
+            imageProxy.close()
+        }
+
+        cameraProviderFuture.get().unbindAll()
+        if (showCameraPreview) {
+            cameraProviderFuture.get().bindToLifecycle(
+                lifecycleOwner,
+                cameraSelection.toAndroidCameraSelector(),
+                preview,
+                imageAnalysis
+            )
+        } else {
+            cameraProviderFuture.get().bindToLifecycle(
+                lifecycleOwner,
+                cameraSelection.toAndroidCameraSelector(),
+                imageAnalysis
+            )
+        }
+
+        onDispose {
+            cameraProvider.unbindAll()
+            executor.shutdown()
+        }
     }
-    AndroidView(factory = { previewView }, modifier = modifier)
+
+    if (showCameraPreview) {
+        AndroidView(
+            modifier = modifier,
+            factory = { context ->
+                previewView.value!!
+            }
+        )
+    }
 }
 
-//TODO: See if it could be possible to request the instance simply by `ProcessCameraProvider.getInstance(this).await()`
-private suspend fun Context.getCameraProvider(): ProcessCameraProvider =
-    suspendCoroutine { continuation ->
-        ProcessCameraProvider.getInstance(this).also { cameraProvider ->
-            cameraProvider.addListener({
-                continuation.resume(cameraProvider.get())
-            }, ContextCompat.getMainExecutor(this))
-        }
+private fun CameraCaptureResolution.getDimensions(): Size {
+    return when (this) {
+        CameraCaptureResolution.LOW -> Size(640, 480)
+        CameraCaptureResolution.MEDIUM -> Size(1280, 720)
+        CameraCaptureResolution.HIGH -> Size(1920, 1080)
     }
+}
+
+private fun CameraSelection.toAndroidCameraSelector() =
+    when (this) {
+        CameraSelection.DEFAULT_BACK_CAMERA -> CameraSelector.DEFAULT_BACK_CAMERA
+        CameraSelection.DEFAULT_FRONT_CAMERA -> CameraSelector.DEFAULT_FRONT_CAMERA
+    }
+
+@OptIn(TransformExperimental::class)
+private fun getCorrectionMatrix(imageProxy: ImageProxy, previewView: PreviewView) : Matrix {
+
+    // This matrix maps (-1, -1) -> (1, 1) space to preview-coordinate system. This includes
+    // any scaling, rotation, or cropping that's done in the preview.
+    val matrix = previewView.outputTransform!!.matrix
+    val composeMatrix = Matrix()
+    composeMatrix.setFrom(matrix)
+
+    // By the scale and translate below, we modify the matrix so it maps
+    // (0, 0) -> (width, height) of the frame to analyze to the preview
+    // coordinate system
+    composeMatrix.scale(2f/imageProxy.width, 2f/imageProxy.height, 1f)
+    composeMatrix.translate(-0.5f*imageProxy.width, -0.5f*imageProxy.height, 1.0f)
+
+    return composeMatrix
+}

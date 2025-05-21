@@ -62,6 +62,9 @@ androidx-sqlite = "2.5.0-alpha12"
 play-services-identity-credentials = "16.0.0-alpha05"
 androidx-credentials = "1.5.0-rc01"
 androidx-credentials-registry-provider = "1.0.0-alpha01"
+errorprone = "2.38.0"
+mlkit-barcode-scanning = "17.3.0"
+semver = "3.0.0"
 
 [libraries]
 androidx-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview", version.ref = "uiToolingPreview" }
@@ -112,6 +115,7 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 javax-servlet-api = { module = "javax.servlet:javax.servlet-api", version.ref = "javax-servlet-api" }
 ktor-network = { module = "io.ktor:ktor-network", version.ref = "ktor" }
+ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
 androidx-lifecycle-extensions = { module = "androidx.lifecycle:lifecycle-extensions", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-livedata = { module = "androidx.lifecycle:lifecycle-livedata-ktx", version.ref = "androidx-lifecycle-ktx" }
 androidx-lifecycle-viewmodel = { module = "androidx.lifecycle:lifecycle-viewmodel-ktx", version.ref = "androidx-lifecycle-ktx" }
@@ -141,6 +145,9 @@ postgresql = { module="org.postgresql:postgresql", version.ref = "postgresql" }
 play-services-identity-credentials = {module = "com.google.android.gms:play-services-identity-credentials", version.ref = "play-services-identity-credentials"}
 androidx-credentials = { module = "androidx.credentials:credentials", version.ref="androidx-credentials" }
 androidx-credentials-registry-provider = { module = "androidx.credentials.registry:registry-provider", version.ref = "androidx-credentials-registry-provider" }
+errorprone-annotations = { module = "com.google.errorprone:error_prone_annotations", version.ref="errorprone"}
+mlkit-barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref="mlkit-barcode-scanning"}
+semver = { module = "io.github.z4kn4fein:semver", version.ref="semver" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
@@ -155,3 +162,5 @@ navigation-safe-args = { id = "androidx.navigation.safeargs.kotlin", version.ref
 parcelable = { id = "org.jetbrains.kotlin.plugin.parcelize", version.ref = "kotlin" }
 buildconfig = { id = "com.github.gmazzo.buildconfig", version.ref = "buildconfig" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
+kotlinCocoapods = { id = "org.jetbrains.kotlin.native.cocoapods", version.ref = "kotlin" }

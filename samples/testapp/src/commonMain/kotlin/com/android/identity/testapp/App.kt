@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -26,7 +27,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.android.identity.testapp.provisioning.backend.ApplicationSupportLocal
+import com.android.identity.testapp.provisioning.backend.ProvisioningBackendProviderLocal
+import com.android.identity.testapp.provisioning.backend.ProvisioningBackendProviderRemote
+import com.android.identity.testapp.provisioning.model.ProvisioningModel
+import com.android.identity.testapp.provisioning.openid4vci.extractCredentialIssuerData
 import com.android.identity.testapp.ui.AppTheme
+import com.android.identity.testapp.ui.BarcodeScanningScreen
 import com.android.identity.testapp.ui.CameraScreen
 import org.multipaz.models.digitalcredentials.DigitalCredentials
 import org.multipaz.models.presentment.PresentmentModel
@@ -93,9 +100,11 @@ import io.ktor.http.decodeURLPart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -105,7 +114,10 @@ import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.multipaz.compose.prompt.PromptDialogs
+import org.multipaz.provisioning.WalletApplicationCapabilities
+import org.multipaz.provisioning.evidence.Openid4VciCredentialOffer
 import org.multipaz.storage.base.BaseStorageTable
+import org.multipaz.util.fromHex
 
 /**
  * Application singleton.
@@ -118,6 +130,7 @@ class App private constructor(val promptModel: PromptModel) {
 
     lateinit var documentTypeRepository: DocumentTypeRepository
 
+    lateinit var secureAreaRepository: SecureAreaRepository
     lateinit var softwareSecureArea: SoftwareSecureArea
     lateinit var documentStore: DocumentStore
     lateinit var documentModel: DocumentModel
@@ -135,6 +148,12 @@ class App private constructor(val promptModel: PromptModel) {
 
     lateinit var readerTrustManager: TrustManager
 
+    private lateinit var provisioningModel: ProvisioningModel
+
+    private val credentialOffers = Channel<Openid4VciCredentialOffer>()
+
+    private val provisioningBackendProviderLocal = ProvisioningBackendProviderLocal()
+
     private suspend fun init() {
         val initFuncs = listOf<Pair<suspend () -> Unit, String>>(
             Pair(::platformInit, "platformInit"),
@@ -147,6 +166,7 @@ class App private constructor(val promptModel: PromptModel) {
             Pair(::readerRootInit, "readerRootInit"),
             Pair(::readerInit, "readerInit"),
             Pair(::trustManagersInit, "trustManagersInit"),
+            Pair(::provisioningModelInit, "provisioningModelInit")
         )
         val begin = Clock.System.now()
         for ((func, name) in initFuncs) {
@@ -173,7 +193,7 @@ class App private constructor(val promptModel: PromptModel) {
 
     private suspend fun documentStoreInit() {
         softwareSecureArea = SoftwareSecureArea.create(platformStorage())
-        val secureAreaRepository: SecureAreaRepository = SecureAreaRepository.build {
+        secureAreaRepository = SecureAreaRepository.build {
             add(softwareSecureArea)
             add(platformSecureAreaProvider().get())
             addFactory(CloudSecureArea.IDENTIFIER_PREFIX) { identifier ->
@@ -223,6 +243,32 @@ class App private constructor(val promptModel: PromptModel) {
         generateTrustManagers()
     }
 
+    private val useWalletServer = false
+
+    private suspend fun provisioningModelInit() {
+        val backendProvider = if (useWalletServer) {
+            ProvisioningBackendProviderRemote(
+                baseUrl = "http://localhost:8080/server"
+            ) {
+                WalletApplicationCapabilities(
+                    generatedAt = Clock.System.now(),
+                    androidKeystoreAttestKeyAvailable = true,
+                    androidKeystoreStrongBoxAvailable = true,
+                    androidIsEmulator = platformIsEmulator,
+                    directAccessSupported = false,
+                )
+            }
+        } else {
+            provisioningBackendProviderLocal
+        }
+        provisioningModel = ProvisioningModel(
+            backendProvider,
+            documentStore,
+            promptModel,
+            secureAreaRepository
+        )
+    }
+
     private val certsValidFrom = LocalDate.parse("2024-12-01").atStartOfDayIn(TimeZone.UTC)
     private val certsValidUntil = LocalDate.parse("2034-12-01").atStartOfDayIn(TimeZone.UTC)
 
@@ -253,12 +299,12 @@ class App private constructor(val promptModel: PromptModel) {
     val bundledIacaCert: X509Cert by lazy {
         MdocUtil.generateIacaCertificate(
             iacaKey = iacaKey,
-            subject = X500Name.fromName("C=ZZ,CN=OWF Identity Credential TEST IACA"),
-            serial = ASN1Integer(1L),
+            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = certsValidFrom,
             validUntil = certsValidUntil,
             issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
-            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential"
+            crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
         )
     }
 
@@ -289,8 +335,8 @@ class App private constructor(val promptModel: PromptModel) {
     private val bundledReaderRootCert: X509Cert by lazy {
         MdocUtil.generateReaderRootCertificate(
             readerRootKey = bundledReaderRootKey,
-            subject = X500Name.fromName("CN=OWF IC TestApp Reader Root"),
-            serial = ASN1Integer(1L),
+            subject = X500Name.fromName("CN=OWF Multipaz TestApp Reader Root"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = certsValidFrom,
             validUntil = certsValidUntil,
         )
@@ -348,7 +394,7 @@ class App private constructor(val promptModel: PromptModel) {
                     readerRootKey = readerRootKey,
                     readerKey = readerKey.publicKey,
                     subject = X500Name.fromName("CN=OWF IC TestApp Reader Cert"),
-                    serial = ASN1Integer(1L),
+                    serial = ASN1Integer.fromRandom(numBits = 128),
                     validFrom = certsValidFrom,
                     validUntil = certsValidUntil,
                 )
@@ -373,7 +419,7 @@ class App private constructor(val promptModel: PromptModel) {
         issuerTrustManager.addTrustPoint(
             TrustPoint(
                 certificate = iacaCert,
-                displayName = "OWF IC TestApp Issuer",
+                displayName = "OWF Multipaz TestApp",
                 displayIcon = null
             )
         )
@@ -417,7 +463,7 @@ class App private constructor(val promptModel: PromptModel) {
         readerTrustManager.addTrustPoint(
             TrustPoint(
                 certificate = readerRootCert,
-                displayName = "OWF IC TestApp",
+                displayName = "OWF Multipaz TestApp",
                 displayIcon = Res.readBytes("files/utopia-brewery.png")
             )
         )
@@ -439,8 +485,37 @@ class App private constructor(val promptModel: PromptModel) {
         }
     }
 
+    /**
+     * Handle a link (either a app link, universal link, or custom URL schema link).
+     */
+    fun handleUrl(url: String) {
+        if (url.startsWith(OID4VCI_CREDENTIAL_OFFER_URL_SCHEME)) {
+            val queryIndex = url.indexOf('?')
+            if (queryIndex >= 0) {
+                val query = url.substring(queryIndex + 1)
+                CoroutineScope(Dispatchers.Default).launch {
+                    val offer = extractCredentialIssuerData(query)
+                    if (offer != null) {
+                        Logger.i(TAG, "Process credential offer '$query'")
+                        credentialOffers.send(offer)
+                    }
+                }
+            }
+        } else if (url.startsWith(ApplicationSupportLocal.APP_LINK_BASE_URL)) {
+            CoroutineScope(Dispatchers.Default).launch {
+                withContext(provisioningModel.coroutineContext) {
+                    provisioningBackendProviderLocal.getApplicationSupport()
+                        .onLandingUrlNavigated(url)
+                }
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "App"
+
+        // OID4VCI url scheme used for filtering OID4VCI Urls from all incoming URLs (deep links or QR)
+        private const val OID4VCI_CREDENTIAL_OFFER_URL_SCHEME = "openid-credential-offer://"
 
         private var app: App? = null
         private val appLock = Mutex()
@@ -498,6 +573,15 @@ class App private constructor(val promptModel: PromptModel) {
             it.route == routeWithoutArgs
         } ?: StartDestination
 
+        LaunchedEffect(true) {
+            while (true) {
+                val credentialOffer = credentialOffers.receive()
+                Logger.i(TAG, "Process credential offer from ${credentialOffer.issuerUri}")
+                provisioningModel.startProvisioning(credentialOffer)
+                navController.navigate(ProvisioningTestDestination.route)
+            }
+        }
+
         snackbarHostState = remember { SnackbarHostState() }
         AppTheme {
             // A surface container using the 'background' color from the theme
@@ -546,7 +630,8 @@ class App private constructor(val promptModel: PromptModel) {
                             onClickRichText = { navController.navigate(RichTextDestination.route) },
                             onClickNotifications = { navController.navigate(NotificationsDestination.route) },
                             onClickScreenLock = { navController.navigate(ScreenLockDestination.route) },
-                            onClickCamera = { navController.navigate(CameraDestination.route) }
+                            onClickCamera = { navController.navigate(CameraDestination.route) },
+                            onClickBarcodeScanning = { navController.navigate(BarcodeScanningDestination.route) }
                         )
                     }
                     composable(route = SettingsDestination.route) {
@@ -661,7 +746,11 @@ class App private constructor(val promptModel: PromptModel) {
                         PassphrasePromptScreen(showToast = { message -> showToast(message) })
                     }
                     composable(route = ProvisioningTestDestination.route) {
-                        ProvisioningTestScreen()
+                        ProvisioningTestScreen(
+                            app = this@App,
+                            provisioningModel = provisioningModel,
+                            presentmentModel = presentmentModel
+                        )
                     }
                     composable(route = ConsentModalBottomSheetListDestination.route) {
                         ConsentModalBottomSheetListScreen(
@@ -761,6 +850,11 @@ class App private constructor(val promptModel: PromptModel) {
                     }
                     composable(route = CameraDestination.route) {
                         CameraScreen(
+                            showToast = { message -> showToast(message) }
+                        )
+                    }
+                    composable(route = BarcodeScanningDestination.route) {
+                        BarcodeScanningScreen(
                             showToast = { message -> showToast(message) }
                         )
                     }

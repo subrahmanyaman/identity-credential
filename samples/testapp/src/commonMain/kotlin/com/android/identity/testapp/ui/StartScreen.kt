@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.android.identity.testapp.ui.AppUpdateCard
 import org.multipaz.testapp.DocumentModel
 import org.multipaz.testapp.Platform
 import org.multipaz.testapp.platform
@@ -36,6 +37,7 @@ import multipazproject.samples.testapp.generated.resources.screen_lock_title
 import multipazproject.samples.testapp.generated.resources.secure_enclave_secure_area_screen_title
 import multipazproject.samples.testapp.generated.resources.software_secure_area_screen_title
 import kotlinx.coroutines.launch
+import multipazproject.samples.testapp.generated.resources.barcode_scanning_title
 import multipazproject.samples.testapp.generated.resources.camera_title
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.cards.InfoCard
@@ -65,6 +67,7 @@ fun StartScreen(
     onClickNotifications: () -> Unit = {},
     onClickScreenLock: () -> Unit = {},
     onClickCamera: () -> Unit = {},
+    onClickBarcodeScanning: () -> Unit = {}
 ) {
     val blePermissionState = rememberBluetoothPermissionState()
     val coroutineScope = rememberCoroutineScope()
@@ -77,6 +80,7 @@ fun StartScreen(
             modifier = Modifier.padding(8.dp)
         ) {
             Column {
+                AppUpdateCard()
                 if (documentModel.documentInfos.isEmpty()) {
                     WarningCard(
                         modifier = Modifier.clickable() {
@@ -230,6 +234,12 @@ fun StartScreen(
                 item {
                     TextButton(onClick = onClickCamera) {
                         Text(stringResource(Res.string.camera_title))
+                    }
+                }
+
+                item {
+                    TextButton(onClick = onClickBarcodeScanning) {
+                        Text(stringResource(Res.string.barcode_scanning_title))
                     }
                 }
             }

@@ -17,6 +17,8 @@ val projectVersionName: String by rootProject.extra
 buildConfig {
     packageName("org.multipaz.testapp")
     buildConfigField("VERSION", projectVersionName)
+    buildConfigField("TEST_APP_UPDATE_URL", System.getenv("TEST_APP_UPDATE_URL") ?: "")
+    buildConfigField("TEST_APP_UPDATE_WEBSITE_URL", System.getenv("TEST_APP_UPDATE_WEBSITE_URL") ?: "")
     useKotlinOutput { internalVisibility = false }
 }
 
@@ -92,12 +94,14 @@ kotlin {
                 implementation(libs.jetbrains.lifecycle.viewmodel.compose)
                 implementation(libs.ktor.client.core)
                 implementation(libs.ktor.network)
+                implementation(libs.semver)
 
                 implementation(project(":multipaz"))
                 implementation(project(":multipaz-models"))
                 implementation(project(":multipaz-doctypes"))
                 implementation(project(":multipaz-provisioning-api"))
                 implementation(project(":multipaz-compose"))
+                implementation(project(":multipaz-barcodes"))
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.kotlinx.io.core)
                 implementation(libs.ktor.client.core)

@@ -50,7 +50,6 @@ class NdefService: HostApduService() {
         }
     }
 
-
     private fun vibrate(pattern: List<Int>) {
         val vibrator = ContextCompat.getSystemService(applicationContext, Vibrator::class.java)
         val vibrationEffect = VibrationEffect.createWaveform(pattern.map { it.toLong() }.toLongArray(), -1)
