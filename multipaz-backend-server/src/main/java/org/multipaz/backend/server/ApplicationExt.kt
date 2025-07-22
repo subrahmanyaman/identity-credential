@@ -32,6 +32,9 @@ import org.multipaz.rpc.handler.RpcDispatcherLocal
 import org.multipaz.rpc.handler.RpcExceptionMap
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.rpc.transport.HttpTransport
+import org.multipaz.server.ServerConfiguration
+import org.multipaz.server.ServerEnvironment
+import org.multipaz.server.baseUrl
 import org.multipaz.util.Logger
 
 const val TAG = "ApplicationExt"
@@ -65,7 +68,7 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
             val record = LandingRecord.fromCbor(recordData.toByteArray())
             record.resolved = rawUri.substring(queryIndex + 1)
             storage.update(id, ByteString(record.toCbor()))
-            val baseUrl = configuration.getValue("base_url")
+            val baseUrl = configuration.baseUrl
             val landingUrl = "$baseUrl/${ApplicationSupportState.URL_PREFIX}$id"
             withContext(env) {
                 ApplicationSupportState(record.clientId)

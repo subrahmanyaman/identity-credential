@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.multipaz.mdoc.zkp.ZkSystemRepository
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.seconds
 
@@ -178,7 +179,7 @@ class PresentmentModel {
     }
 
     /**
-     * Sets the [PresentmentSource] to use for presentment.
+     * Sets the [PresentmentSource] to use as the source of truth for presentment.
      *
      * This sets the model to [State.PROCESSING].
      *
@@ -317,37 +318,55 @@ class PresentmentModel {
     }
 
     private suspend fun startPresentmentFlow() {
-        when (mechanism!!) {
-            is MdocPresentmentMechanism -> {
-                mdocPresentment(
-                    documentTypeRepository = source!!.documentTypeRepository,
-                    source = source!!,
-                    model = this,
-                    mechanism = mechanism as MdocPresentmentMechanism,
-                    dismissable = _dismissable,
-                    numRequestsServed = _numRequestsServed,
-                    showDocumentPicker = { documents ->
-                        showDocumentPicker(documents)
-                    },
-                    showConsentPrompt = { document, request, trustPoint ->
-                        showConsentPrompt(document, request, trustPoint)
-                    },
-                )
+        try {
+            when (mechanism!!) {
+                is MdocPresentmentMechanism -> {
+                    mdocPresentment(
+                        documentTypeRepository = source!!.documentTypeRepository,
+                        source = source!!,
+                        mechanism = mechanism as MdocPresentmentMechanism,
+                        dismissable = _dismissable,
+                        numRequestsServed = _numRequestsServed,
+                        showDocumentPicker = { documents ->
+                            showDocumentPicker(documents)
+                        },
+                        showConsentPrompt = { document, request, trustPoint ->
+                            showConsentPrompt(document, request, trustPoint)
+                        },
+                    )
+                }
+                is DigitalCredentialsPresentmentMechanism -> {
+                    digitalCredentialsPresentment(
+                        documentTypeRepository = source!!.documentTypeRepository,
+                        source = source!!,
+                        mechanism = mechanism as DigitalCredentialsPresentmentMechanism,
+                        dismissable = _dismissable,
+                        showConsentPrompt = { document, request, trustPoint ->
+                            showConsentPrompt(document, request, trustPoint)
+                        }
+                    )
+                }
+                is UriSchemePresentmentMechanism -> {
+                    uriSchemePresentment(
+                        documentTypeRepository = source!!.documentTypeRepository,
+                        source = source!!,
+                        mechanism = mechanism as UriSchemePresentmentMechanism,
+                        dismissable = _dismissable,
+                        showDocumentPicker = { documents ->
+                            showDocumentPicker(documents)
+                        },
+                        showConsentPrompt = { document, request, trustPoint ->
+                            showConsentPrompt(document, request, trustPoint)
+                        }
+                    )
+                }
+                else -> throw IllegalStateException("Unsupported mechanism $mechanism")
             }
-            is DigitalCredentialsPresentmentMechanism -> {
-                digitalCredentialsPresentment(
-                    documentTypeRepository = source!!.documentTypeRepository,
-                    source = source!!,
-                    model = this,
-                    mechanism = mechanism as DigitalCredentialsPresentmentMechanism,
-                    dismissable = _dismissable,
-                    showConsentPrompt = { document, request, trustPoint ->
-                        showConsentPrompt(document, request, trustPoint)
-                    }
-                )
-            }
-            else -> throw IllegalStateException("Unsupported mechanism $mechanism")
+        } catch (e: Throwable) {
+            setCompleted(e)
+            return
         }
+        setCompleted()
     }
 
     private var documentPickerContinuation: CancellableContinuation<Document?>? = null

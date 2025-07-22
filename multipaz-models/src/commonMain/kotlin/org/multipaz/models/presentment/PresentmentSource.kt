@@ -1,11 +1,133 @@
 package org.multipaz.models.presentment
 
+import kotlinx.datetime.Clock
 import org.multipaz.credential.Credential
+import org.multipaz.credential.SecureAreaBoundCredential
+import org.multipaz.crypto.EcCurve
 import org.multipaz.document.Document
+import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.request.JsonRequest
+import org.multipaz.request.MdocRequest
 import org.multipaz.request.Request
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
+import org.multipaz.sdjwt.credential.SdJwtVcCredential
+import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustPoint
+import org.multipaz.util.Logger
 
+/**
+ * The source of truth used for credential presentment.
+ *
+ * @property documentStore the [DocumentStore] which holds credentials that can be presented.
+ * @property documentTypeRepository a [DocumentTypeRepository] which holds metadata for document types.
+ * @property readerTrustManager the [TrustManager] used to determine if a reader is trusted.
+ */
+abstract class PresentmentSource(
+    open val documentStore: DocumentStore,
+    open val documentTypeRepository: DocumentTypeRepository,
+    open val readerTrustManager: TrustManager,
+    open val zkSystemRepository: ZkSystemRepository? = null
+) {
+
+    /**
+     * Chooses a credential from a document.
+     *
+     * @param document the [Document] to pick a credential from or `null`.
+     * @param request the request in question.
+     * @param keyAgreementPossible if non-empty, a credential using Key Agreement may be returned provided
+     *   its private key is one of the given curves.
+     * @return a [Credential] belonging to [document] that may be presented or `null`.
+     */
+    abstract suspend fun selectCredential(
+        document: Document?,
+        request: Request,
+        keyAgreementPossible: List<EcCurve>,
+    ): Credential?
+}
+
+private const val TAG = "PresentmentSource"
+
+internal suspend fun PresentmentSource.findTrustPoint(request: Request): TrustPoint? {
+    return request.requester.certChain?.let {
+        val trustResult = readerTrustManager.verify(it.certificates)
+        if (trustResult.isTrusted) {
+            trustResult.trustPoints[0]
+        } else {
+            trustResult.error?.let {
+                Logger.w(TAG, "Trust-result error", it)
+            }
+            null
+        }
+    }
+}
+
+internal suspend fun PresentmentSource.getDocumentsMatchingRequest(
+    request: Request,
+): List<Document> {
+    return when (request) {
+        is MdocRequest -> mdocFindDocumentsForRequest(request)
+        is JsonRequest -> sdjwtFindDocumentsForRequest(request)
+    }
+}
+
+private suspend fun PresentmentSource.mdocFindDocumentsForRequest(
+    request: MdocRequest,
+): List<Document> {
+    val now = Clock.System.now()
+    val result = mutableListOf<Document>()
+
+    for (documentName in documentStore.listDocuments()) {
+        val document = documentStore.lookupDocument(documentName) ?: continue
+        if (mdocDocumentMatchesRequest(request, document)) {
+            result.add(document)
+        }
+    }
+    return result
+}
+
+private suspend fun PresentmentSource.mdocDocumentMatchesRequest(
+    request: MdocRequest,
+    document: Document,
+): Boolean {
+    for (credential in document.getCertifiedCredentials()) {
+        if (credential is MdocCredential && credential.docType == request.docType) {
+            return true
+        }
+    }
+    return false
+}
+
+private suspend fun PresentmentSource.sdjwtFindDocumentsForRequest(
+    request: JsonRequest,
+): List<Document> {
+    val now = Clock.System.now()
+    val result = mutableListOf<Document>()
+
+    for (documentName in documentStore.listDocuments()) {
+        val document = documentStore.lookupDocument(documentName) ?: continue
+        if (sdjwtDocumentMatchesRequest(request, document)) {
+            result.add(document)
+        }
+    }
+    return result
+}
+
+internal suspend fun PresentmentSource.sdjwtDocumentMatchesRequest(
+    request: JsonRequest,
+    document: Document,
+): Boolean {
+    for (credential in document.getCertifiedCredentials()) {
+        if (credential is SdJwtVcCredential && credential.vct == request.vct) {
+            return true
+        }
+    }
+    return false
+}
+
+/*
 /**
  * An interface used for the application to provide data and policy for credential presentment.
  */
@@ -22,7 +144,7 @@ interface PresentmentSource {
      * @param request The request.
      * @return a [TrustPoint] or `null` if none could be found.
      */
-    fun findTrustPoint(
+    suspend fun findTrustPoint(
         request: Request
     ): TrustPoint?
 
@@ -42,12 +164,12 @@ interface PresentmentSource {
      * Returns a credential that can be presented.
      *
      * @param request the request.
-     * @param document the document to get a credential from.
+     * @param document the document to get a credential from or `null`.
      * @return a [CredentialForPresentment] object with a credential that can be used for presentment.
      */
     suspend fun getCredentialForPresentment(
         request: Request,
-        document: Document
+        document: Document?
     ): CredentialForPresentment
 
     /**
@@ -85,3 +207,4 @@ interface PresentmentSource {
         request: Request,
     ): Boolean
 }
+ */

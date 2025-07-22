@@ -73,9 +73,7 @@ kotlin {
                 implementation(libs.bouncy.castle.bcprov)
                 implementation(libs.androidx.biometrics)
                 implementation(libs.ktor.client.android)
-                implementation(libs.play.services.identity.credentials)
-                implementation(libs.androidx.credentials)
-                implementation(libs.androidx.credentials.registry.provider)
+                implementation(libs.process.phoenix)
             }
         }
 
@@ -97,11 +95,12 @@ kotlin {
                 implementation(libs.semver)
 
                 implementation(project(":multipaz"))
+                implementation(project(":multipaz-longfellow"))
                 implementation(project(":multipaz-models"))
                 implementation(project(":multipaz-doctypes"))
                 implementation(project(":multipaz-provisioning-api"))
                 implementation(project(":multipaz-compose"))
-                implementation(project(":multipaz-barcodes"))
+                implementation(project(":multipaz-mlkit"))
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.kotlinx.io.core)
                 implementation(libs.ktor.client.core)
@@ -144,6 +143,7 @@ android {
                     "proguard-rules.pro"
                 )
             )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     flavorDimensions.addAll(listOf("standard"))

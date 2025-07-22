@@ -4,12 +4,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atStartOfDayIn
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
@@ -21,7 +17,6 @@ import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
-import org.multipaz.credential.CredentialLoader
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
@@ -32,8 +27,8 @@ import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.document.Document
-import org.multipaz.document.DocumentMetadata
 import org.multipaz.document.DocumentStore
+import org.multipaz.document.buildDocumentStore
 import org.multipaz.documenttype.DocumentType
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
@@ -43,24 +38,18 @@ import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.mdoc.util.MdocUtil
-import org.multipaz.sdjwt.Issuer
-import org.multipaz.sdjwt.SdJwtVcGenerator
+import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
-import org.multipaz.sdjwt.util.JsonWebKey
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
-import org.multipaz.storage.StorageTableSpec
-import org.multipaz.storage.base.BaseStorageTable
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.util.Logger
-import org.multipaz.util.fromHex
 import kotlin.collections.component1
 import kotlin.collections.component2
 import kotlin.collections.iterator
 import kotlin.time.Duration.Companion.days
-import kotlin.time.Duration.Companion.hours
 
 /**
  * Test harness for DocumentStore and related types.
@@ -87,6 +76,11 @@ class DocumentStoreTestHarness {
     lateinit var docEuPid: Document
     lateinit var docPhotoId: Document
 
+    lateinit var dsKey: EcPrivateKey
+
+    lateinit var readerRootKey: EcPrivateKey
+    lateinit var readerRootCert: X509Cert
+
     private val lock = Mutex()
     private var isInitialized = false
 
@@ -98,7 +92,7 @@ class DocumentStoreTestHarness {
      * in the domain `mdoc` and the EU PID will also have a [KeyBoundSdJwtVcCredential]
      * in the domain `sdjwt`.
      *
-     * The [DocumentStore] itself is backed by [EphemeralStorage] and is using
+     * The [DocumentStore] itself is backed by [EphemeralStorage] and each credential is using
      * a single [SoftwareSecureArea].
      *
      * This method can be called multiple times.
@@ -121,21 +115,11 @@ class DocumentStoreTestHarness {
         storage = EphemeralStorage()
 
         softwareSecureArea = SoftwareSecureArea.create(storage)
-        secureAreaRepository = SecureAreaRepository.build {
-            add(softwareSecureArea)
-        }
+        secureAreaRepository = SecureAreaRepository.Builder()
+            .add(softwareSecureArea)
+            .build()
 
-        val credentialLoader = CredentialLoader()
-        credentialLoader.addCredentialImplementation(MdocCredential::class) {
-            document -> MdocCredential(document)
-        }
-        documentStore = DocumentStore(
-            storage = storage,
-            secureAreaRepository = secureAreaRepository,
-            credentialLoader = credentialLoader,
-            documentMetadataFactory = TestDocumentMetadata::create,
-            documentTableSpec = testDocumentTableSpec
-        )
+        documentStore = buildDocumentStore(storage = storage, secureAreaRepository = secureAreaRepository) {}
 
         val now = Clock.System.now()
         val signedAt = now - 1.days
@@ -168,26 +152,37 @@ class DocumentStoreTestHarness {
             iacaKeyPub
         )
 
-        // TODO: Generate random serials with sufficient entropy as per 18013-5 Annex B
         val iacaCert = MdocUtil.generateIacaCertificate(
             iacaKey = iacaKey,
             subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST IACA"),
-            serial = ASN1Integer("26457B125F0AD75217A98EE6CFDEA7FC486221".fromHex()),
+            serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = iacaValidFrom,
             validUntil = iacaValidUntil,
             issuerAltNameUrl = "https://github.com/openwallet-foundation-labs/identity-credential",
             crlUrl = "https://github.com/openwallet-foundation-labs/identity-credential/crl"
         )
 
-        val dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        dsKey = Crypto.createEcPrivateKey(EcCurve.P256)
         val dsCert = MdocUtil.generateDsCertificate(
             iacaCert = iacaCert,
             iacaKey = iacaKey,
             dsKey = dsKey.publicKey,
             subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST DS"),
-            serial = ASN1Integer("26457B125F0AD75217A98EE6CFDEA7FC486221".fromHex()),
+            serial = ASN1Integer.fromRandom(numBits = 128),
             validFrom = dsValidFrom,
             validUntil = dsValidUntil,
+        )
+
+        val readerRootValidFrom = validFrom
+        val readerRootValidUntil = validUntil
+        readerRootKey = Crypto.createEcPrivateKey(EcCurve.P256)
+        readerRootCert = MdocUtil.generateReaderRootCertificate(
+            readerRootKey = readerRootKey,
+            subject = X500Name.fromName("C=US,CN=OWF Multipaz TEST Reader Root"),
+            serial = ASN1Integer.fromRandom(128),
+            validFrom = readerRootValidFrom,
+            validUntil = readerRootValidUntil,
+            crlUrl = "https://verifier.multipaz.org/crl"
         )
 
         provisionTestDocuments(
@@ -200,45 +195,6 @@ class DocumentStoreTestHarness {
         )
 
         isInitialized = true
-    }
-
-    private class TestDocumentMetadata private constructor(
-        private val saveFn: suspend (data: ByteString) -> Unit
-    ) : DocumentMetadata {
-        override val provisioned: Boolean
-            get() = true
-        override val displayName: String?
-            get() = null
-        override val typeDisplayName: String?
-            get() = null
-        override val cardArt: ByteString?
-            get() = null
-        override val issuerLogo: ByteString?
-            get() = null
-
-        override suspend fun documentDeleted() {
-        }
-
-        companion object {
-            suspend fun create(
-                documentId: String,
-                serializedData: ByteString?,
-                saveFn: suspend (data: ByteString) -> Unit
-            ): TestDocumentMetadata {
-                return TestDocumentMetadata(saveFn)
-            }
-        }
-    }
-
-    private val testDocumentTableSpec = object: StorageTableSpec(
-        name = "TestDocuments",
-        supportExpiration = false,
-        supportPartitions = false,
-        schemaVersion = 1L,           // Bump every time incompatible changes are made
-    ) {
-        override suspend fun schemaUpgrade(oldTable: BaseStorageTable) {
-            oldTable.deleteAll()
-        }
     }
 
     private suspend fun provisionTestDocuments(
@@ -262,7 +218,7 @@ class DocumentStoreTestHarness {
             documentStore = documentStore,
             dsKey = dsKey,
             dsCert = dsCert,
-            documentType = PhotoID.getDocumentType(),
+            documentType = EUPersonalID.getDocumentType(),
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
@@ -271,7 +227,7 @@ class DocumentStoreTestHarness {
             documentStore = documentStore,
             dsKey = dsKey,
             dsCert = dsCert,
-            documentType = EUPersonalID.getDocumentType(),
+            documentType = PhotoID.getDocumentType(),
             signedAt = signedAt,
             validFrom = validFrom,
             validUntil = validUntil,
@@ -301,7 +257,7 @@ class DocumentStoreTestHarness {
             )
         }
 
-        if (documentType.vcDocumentType != null) {
+        if (documentType.jsonDocumentType != null) {
             addSdJwtVcCredential(
                 document = document,
                 documentType = documentType,
@@ -416,13 +372,17 @@ class DocumentStoreTestHarness {
         dsKey: EcPrivateKey,
         dsCert: X509Cert,
     ) {
-        if (documentType.vcDocumentType == null) {
+        if (documentType.jsonDocumentType == null) {
             return
         }
 
         val identityAttributes = buildJsonObject {
-            for ((claimName, attribute) in documentType.vcDocumentType!!.claims) {
-                val sampleValue = attribute.sampleValueVc
+            for ((claimName, attribute) in documentType.jsonDocumentType!!.claims) {
+                // Skip sub-claims.
+                if (claimName.contains('.')) {
+                    continue
+                }
+                val sampleValue = attribute.sampleValueJson
                 if (sampleValue != null) {
                     put(claimName, sampleValue)
                 } else {
@@ -436,28 +396,26 @@ class DocumentStoreTestHarness {
             asReplacementForIdentifier = null,
             domain = "sdjwt",
             secureArea = softwareSecureArea,
-            vct = documentType.vcDocumentType!!.type,
+            vct = documentType.jsonDocumentType!!.vct,
             createKeySettings = SoftwareCreateKeySettings.Builder().build()
         )
 
-        val sdJwtVcGenerator = SdJwtVcGenerator(
-            vct = credential.vct,
-            payload = identityAttributes,
-            issuer = Issuer(
-                "https://example-issuer.com",
-                dsKey.publicKey.curve.defaultSigningAlgorithmFullySpecified,
-                null,
-                X509CertChain(listOf(dsCert))
-            ),
+        val sdJwt = SdJwt.create(
+            issuerKey = dsKey,
+            issuerAlgorithm = dsKey.curve.defaultSigningAlgorithmFullySpecified,
+            issuerCertChain = X509CertChain(listOf(dsCert)),
+            kbKey = (credential as? SecureAreaBoundCredential)?.let { it.secureArea.getKeyInfo(it.alias).publicKey },
+            claims = identityAttributes,
+            nonSdClaims = buildJsonObject {
+                put("iss", "https://example-issuer.com")
+                put("vct", credential.vct)
+                put("iat", signedAt.epochSeconds)
+                put("nbf", validFrom.epochSeconds)
+                put("exp", validUntil.epochSeconds)
+            },
         )
-        sdJwtVcGenerator.publicKey =
-            (credential as? SecureAreaBoundCredential)?.let { JsonWebKey(it.getAttestation().publicKey) }
-        sdJwtVcGenerator.timeSigned = signedAt
-        sdJwtVcGenerator.timeValidityBegin = validFrom
-        sdJwtVcGenerator.timeValidityEnd = validUntil
-        val sdJwt = sdJwtVcGenerator.generateSdJwt(dsKey)
         credential.certify(
-            sdJwt.toString().encodeToByteArray(),
+            sdJwt.compactSerialization.encodeToByteArray(),
             validFrom,
             validUntil
         )

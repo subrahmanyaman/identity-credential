@@ -21,6 +21,11 @@ data class CameraFrame(
     val height: Int,
 
     /**
+     * The device screen orientation angle in degrees clockwise from portrait (0) at the moment the image was taken.
+     */
+    val rotation: Int,
+
+    /**
      * A matrix to convert from coordinates in [CameraImage] to coordinates in the preview.
      *
      * This can be used to render graphics on top of the preview, for example to put boxes
@@ -31,4 +36,8 @@ data class CameraFrame(
      * If preview is disabled, this is the identity matrix.
      */
     val previewTransformation: Matrix
-)
+
+) {
+    /** Determine if the rotation angle indicates the camera was used from a landscape phone orientation mode. */
+    val isLandscape: Boolean = (rotation == 90 || rotation == 270)
+}

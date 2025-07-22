@@ -312,6 +312,17 @@ internal class BleCentralManagerAndroid : BleCentralManager {
             }
         }
 
+        @Suppress("DEPRECATION")
+        @Deprecated(
+            "Used natively in Android 12 and lower",
+            ReplaceWith("onCharacteristicRead(gatt, characteristic, characteristic.value, status)")
+        )
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) = onCharacteristicRead(gatt!!, characteristic!!, characteristic.value, status)
+
         override fun onCharacteristicWrite(
             gatt: BluetoothGatt?,
             characteristic: BluetoothGattCharacteristic?,
@@ -370,6 +381,16 @@ internal class BleCentralManagerAndroid : BleCentralManager {
                 onError(Error("onCharacteristicChanged failed", error))
             }
         }
+
+        @Suppress("DEPRECATION")
+        @Deprecated(
+            "Used natively in Android 12 and lower",
+            ReplaceWith("onCharacteristicChanged(gatt, characteristic, characteristic.value)")
+        )
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?
+        ) = onCharacteristicChanged(gatt!!, characteristic!!, characteristic.value)
     }
 
     var incomingMessage = ByteStringBuilder()
@@ -600,25 +621,26 @@ internal class BleCentralManagerAndroid : BleCentralManager {
         characteristic: BluetoothGattCharacteristic,
         value: ByteArray,
     ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            val rc = gatt!!.writeCharacteristic(
-                characteristic,
-                value,
-                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            )
-            if (rc != BluetoothStatusCodes.SUCCESS) {
-                throw Error("Error writing to characteristic ${characteristic.uuid}, rc=$rc")
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            characteristic.setValue(value)
-            @Suppress("DEPRECATION")
-            if (!gatt!!.writeCharacteristic(characteristic)) {
-                throw Error("Error writing to characteristic ${characteristic.uuid}")
-            }
-        }
-        suspendCancellableCoroutine<Boolean> { continuation ->
+        suspendCancellableCoroutine { continuation ->
             setWaitCondition(WaitState.CHARACTERISTIC_WRITE_COMPLETED, continuation)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val rc = gatt!!.writeCharacteristic(
+                    characteristic,
+                    value,
+                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                )
+                if (rc != BluetoothStatusCodes.SUCCESS) {
+                    throw Error("Error writing to characteristic ${characteristic.uuid}, rc=$rc")
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                characteristic.setValue(value)
+                @Suppress("DEPRECATION")
+                if (!gatt!!.writeCharacteristic(characteristic)) {
+                    throw Error("Error writing to characteristic ${characteristic.uuid}")
+                }
+            }
         }
     }
 
@@ -658,7 +680,7 @@ internal class BleCentralManagerAndroid : BleCentralManager {
         // Needed since l2capSocket.outputStream.flush() isn't working
         l2capSocket?.let {
             CoroutineScope(Dispatchers.IO).launch() {
-                delay(5000)
+                delay(15_000)
                 it.close()
             }
         }

@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.CborArray
-import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.DataItem
 import org.multipaz.claim.organizeByNamespace
 import org.multipaz.context.applicationContext
@@ -27,9 +26,15 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
+import org.multipaz.documenttype.DocumentAttribute
+import org.multipaz.documenttype.DocumentAttributeType
 import kotlin.time.Duration.Companion.seconds
 import java.io.ByteArrayOutputStream
 import kotlin.collections.iterator
@@ -44,19 +49,17 @@ private class RegistrationData (
 
 private val exportedStores = mutableMapOf<DocumentStore, RegistrationData>()
 
-private fun getClaimDisplayName(
+private fun getAttributeForJsonClaim(
     documentTypeRepository: DocumentTypeRepository,
     vct: String,
-    claimName: String
-): String {
-    val documentType = documentTypeRepository.getDocumentTypeForVc(vct)
+    path: JsonArray,
+): DocumentAttribute? {
+    val documentType = documentTypeRepository.getDocumentTypeForJson(vct)
     if (documentType != null) {
-        val attr = documentType.vcDocumentType?.claims?.get(claimName)
-        if (attr != null) {
-            return attr.displayName
-        }
+        val flattenedPath = path.joinToString(".") { it.jsonPrimitive.content }
+        return documentType.jsonDocumentType?.claims?.get(flattenedPath)
     }
-    return claimName
+    return null
 }
 
 private fun getDataElementDisplayName(
@@ -128,6 +131,17 @@ private suspend fun updateCredman() {
             protocolTypes = emptyList(),
         )
     )
+        .addOnSuccessListener { Logger.i(TAG, "CredMan registry succeeded (old)") }
+        .addOnFailureListener { Logger.i(TAG, "CredMan registry failed  (old) $it") }
+    client.registerCredentials(
+        RegistrationRequest(
+            credentials = credentialsCbor,
+            matcher = loadMatcher(applicationContext),
+            type = "androidx.credentials.TYPE_DIGITAL_CREDENTIAL",
+            requestType = "",
+            protocolTypes = emptyList(),
+        )
+    )
         .addOnSuccessListener { Logger.i(TAG, "CredMan registry succeeded") }
         .addOnFailureListener { Logger.i(TAG, "CredMan registry failed $it") }
 }
@@ -141,27 +155,30 @@ private suspend fun exportMdocCredential(
     val credentialType = documentTypeRepository.getDocumentTypeForMdoc(credential.docType)
 
     val documentMetadata = document.metadata
-    val cardArt = documentMetadata.cardArt!!.toByteArray()
-    val displayName = documentMetadata.displayName!!
+    val cardArt = documentMetadata.cardArt?.toByteArray()
+    val displayName = documentMetadata.displayName ?: "Unnamed Credential"
 
-    val options = BitmapFactory.Options()
-    options.inMutable = true
-    val credBitmap = BitmapFactory.decodeByteArray(
-        cardArt,
-        0,
-        cardArt.size,
-        options
-    )
-    val scaledIcon = Bitmap.createScaledBitmap(credBitmap, 128, 128, true)
-    val stream = ByteArrayOutputStream()
-    scaledIcon.compress(Bitmap.CompressFormat.PNG, 100, stream)
-    val cardArtResized = stream.toByteArray()
-    Logger.i(TAG, "Resized cardart to 128x128, ${cardArt.size} bytes to ${cardArtResized.size} bytes")
+    val cardArtResized = cardArt?.let {
+        val options = BitmapFactory.Options()
+        options.inMutable = true
+        val credBitmap = BitmapFactory.decodeByteArray(
+            cardArt,
+            0,
+            cardArt.size,
+            options
+        )
+        val scaledIcon = Bitmap.createScaledBitmap(credBitmap, 48, 48, true)
+        val stream = ByteArrayOutputStream()
+        scaledIcon.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        val cardArtResized = stream.toByteArray()
+        Logger.i(TAG, "Resized cardart to 48x48, ${cardArt.size} bytes to ${cardArtResized.size} bytes")
+        cardArtResized
+    }
 
     return buildCborMap {
         put("title", displayName)
         put("subtitle", appName)
-        put("bitmap", cardArtResized)
+        put("bitmap", cardArtResized ?: byteArrayOf())
         putCborMap("mdoc") {
             put("id", document.identifier)
             put("docType", credential.docType)
@@ -212,11 +229,11 @@ private suspend fun exportSdJwtVcCredential(
         cardArt.size,
         options
     )
-    val scaledIcon = Bitmap.createScaledBitmap(credBitmap, 128, 128, true)
+    val scaledIcon = Bitmap.createScaledBitmap(credBitmap, 48, 48, true)
     val stream = ByteArrayOutputStream()
     scaledIcon.compress(Bitmap.CompressFormat.PNG, 100, stream)
     val cardArtResized = stream.toByteArray()
-    Logger.i(TAG, "Resized cardart to 128x128, ${cardArt.size} bytes to ${cardArtResized.size} bytes")
+    Logger.i(TAG, "Resized cardart to 48x48, ${cardArt.size} bytes to ${cardArtResized.size} bytes")
 
     return buildCborMap {
         put("title", displayName)
@@ -228,16 +245,32 @@ private suspend fun exportSdJwtVcCredential(
             putCborMap("claims") {
                 val claims = credential.getClaimsImpl(documentTypeRepository)
                 for (claim in claims) {
-                    val valueString = claim.render()
-
-                    val claimDisplayName = getClaimDisplayName(
+                    val claimName = claim.claimPath[0].jsonPrimitive.content
+                    val claimDisplayName = getAttributeForJsonClaim(
                         documentTypeRepository,
                         credential.vct,
-                        claim.claimName,
-                    )
-                    putCborArray(claim.claimName) {
+                        claim.claimPath,
+                    )?.displayName ?: claimName
+                    putCborArray(claimName) {
                         add(claimDisplayName)
-                        add(valueString)
+                        add(claim.render())
+                    }
+                    // Our matcher currently combines paths to a single string, using `.` as separator. So do
+                    // the same here for all subclaims... yes, we only support a single level of subclaims
+                    // right now. In the future we'll modify the matcher to be smarter about things.
+                    //
+                    if (claim.value is JsonObject) {
+                        for ((subClaimName, subClaimValue) in claim.value) {
+                            val subClaimDisplayName = getAttributeForJsonClaim(
+                                documentTypeRepository,
+                                credential.vct,
+                                JsonArray(listOf(JsonPrimitive(claimName), JsonPrimitive(subClaimName))),
+                            )?.displayName ?: subClaimName
+                            putCborArray("$claimName.$subClaimName") {
+                                add(subClaimDisplayName)
+                                add(subClaimValue.toString())
+                            }
+                        }
                     }
                 }
             }

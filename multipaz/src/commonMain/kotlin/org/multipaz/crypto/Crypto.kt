@@ -3,8 +3,6 @@
 package org.multipaz.crypto
 
 import org.multipaz.util.UUID
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
 
 /**
  * Cryptographic support routines.
@@ -18,6 +16,11 @@ expect object Crypto {
      * The Elliptic Curve Cryptography curves supported by the platform.
      */
     val supportedCurves: Set<EcCurve>
+
+    /**
+     * A human-readable description of the underlying library used.
+     */
+    val provider: String
 
     /**
      * Message digest function.
@@ -51,11 +54,11 @@ expect object Crypto {
     /**
      * Message encryption.
      *
-     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM],
-     * [Algorithm.A256GCM].
+     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], or [Algorithm.A256GCM].
      * @param key the encryption key.
      * @param nonce the nonce/IV.
      * @param messagePlaintext the message to encrypt.
+     * @param aad additional authenticated data or `null`.
      * @return the cipher text with the tag appended to it.
      * @throws IllegalArgumentException if the given algorithm is not supported.
      */
@@ -64,16 +67,17 @@ expect object Crypto {
         key: ByteArray,
         nonce: ByteArray,
         messagePlaintext: ByteArray,
+        aad: ByteArray? = null
     ): ByteArray
 
     /**
      * Message decryption.
      *
-     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM],
-     * [Algorithm.A256GCM].
+     * @param algorithm must be one of [Algorithm.A128GCM], [Algorithm.A192GCM], or [Algorithm.A256GCM].
      * @param key the encryption key.
      * @param nonce the nonce/IV.
      * @param messageCiphertext the message to decrypt with the tag at the end.
+     * @param aad additional authenticated data or `null`.
      * @return the plaintext.
      * @throws IllegalArgumentException if the given algorithm is not supported.
      * @throws IllegalStateException if decryption fails
@@ -83,6 +87,7 @@ expect object Crypto {
         key: ByteArray,
         nonce: ByteArray,
         messageCiphertext: ByteArray,
+        aad: ByteArray? = null
     ): ByteArray
 
     /**
@@ -151,6 +156,7 @@ expect object Crypto {
      *
      * @param key the key to use for key agreement.
      * @param otherKey the key from the other party.
+     * @return the shared secret.
      */
     fun keyAgreement(
         key: EcPrivateKey,
@@ -211,45 +217,4 @@ expect object Crypto {
 
     // TODO: replace with non-platform specific code
     internal fun validateCertChain(certChain: X509CertChain): Boolean
-
-    // TODO: replace with non-platform specific code
-    internal fun encryptJwtEcdhEs(
-        key: EcPublicKey,
-        encAlgorithm: Algorithm,
-        claims: JsonObject,
-        apu: String,
-        apv: String
-    ): JsonElement
-
-    // TODO: replace with non-platform specific code
-    internal fun decryptJwtEcdhEs(
-        encryptedJwt: JsonElement,
-        recipientKey: EcPrivateKey
-    ): JsonObject
-
-    // TODO: replace with non-platform specific code
-    internal fun jwsSign(
-        key: EcPrivateKey,
-        signatureAlgorithm: Algorithm,
-        claimsSet: JsonObject,
-        type: String?,
-        x5c: X509CertChain?
-    ): JsonElement
-
-    // TODO: replace with non-platform specific code
-    internal fun jwsVerify(
-        signedJwt: JsonElement,
-        publicKey: EcPublicKey
-    )
-
-    // TODO: replace with non-platform specific code
-    internal fun jwsGetInfo(
-        signedJwt: JsonElement,
-    ): JwsInfo
 }
-
-internal data class JwsInfo(
-    val claimsSet: JsonObject,
-    val type: String?,
-    val x5c: X509CertChain?
-)

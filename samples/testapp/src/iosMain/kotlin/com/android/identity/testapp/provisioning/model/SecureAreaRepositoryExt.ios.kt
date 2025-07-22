@@ -1,4 +1,4 @@
-package com.android.identity.testapp.provisioning.model
+package org.multipaz.testapp.provisioning.model
 
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.securearea.CreateKeySettings
@@ -11,13 +11,12 @@ import org.multipaz.securearea.config.SecureAreaConfigurationAndroidKeystore
 import org.multipaz.securearea.config.SecureAreaConfigurationCloud
 import org.multipaz.securearea.config.SecureAreaConfigurationSoftware
 import org.multipaz.securearea.software.SoftwareCreateKeySettings
-import org.multipaz.testapp.platformSecureAreaProvider
 
 actual suspend fun SecureAreaRepository.byConfiguration(
     secureAreaConfiguration: SecureAreaConfiguration,
     challenge: ByteString
 ): Pair<SecureArea, CreateKeySettings> {
-    return when(secureAreaConfiguration) {
+    return when (secureAreaConfiguration) {
         is SecureAreaConfigurationSoftware -> Pair(
             getImplementation("SoftwareSecureArea")!!,
             SoftwareCreateKeySettings.Builder()
@@ -26,7 +25,7 @@ actual suspend fun SecureAreaRepository.byConfiguration(
         )
 
         is SecureAreaConfigurationAndroidKeystore -> Pair(
-            platformSecureAreaProvider().get(),
+            getImplementation("SecureEnclaveSecureArea")!!,
             SecureEnclaveCreateKeySettings.Builder()
                 .build()
         )

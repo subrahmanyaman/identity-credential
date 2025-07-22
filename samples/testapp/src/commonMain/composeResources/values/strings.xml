@@ -7,6 +7,11 @@
     <string name="document_viewer_title">Document Viewer</string>
     <string name="credential_viewer_title">Credential</string>
     <string name="credential_claims_viewer_title">Credential Claims</string>
+
+    <string name="trusted_issuers_screen_title">Trusted Issuers</string>
+    <string name="trusted_verifiers_screen_title">Trusted Verifiers</string>
+    <string name="trust_point_viewer_screen_title">Trust Point</string>
+
     <string name="software_secure_area_screen_title">Software Secure Area</string>
     <string name="android_keystore_secure_area_screen_title">Android Keystore Secure Area</string>
     <string name="secure_enclave_secure_area_screen_title">Secure Enclave Secure Area</string>
@@ -28,6 +33,10 @@
     <string name="notifications_title">Notifications</string>
     <string name="screen_lock_title">Screen Lock</string>
     <string name="camera_title">Camera</string>
+    <string name="face_detection_title">Face Detection</string>
     <string name="barcode_scanning_title">Barcode Scanning</string>
+    <string name="selfie_check_title">Selfie Check</string>
+    <string name="selfie_check_subtitle">Selfie Verification for Utopia Department of Motor Vehicles</string>
+    <string name="selfie_check_dialog_title">Selfie Verification</string>
 
 </resources>

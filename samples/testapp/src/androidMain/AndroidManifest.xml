@@ -31,12 +31,16 @@
     <!-- For NFC engagement -->
     <uses-feature
         android:name="android.hardware.nfc"
-        android:required="true" />
+        android:required="false" />
     <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- For posting notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- For displaying name/icon of application requesting credential -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <application
         tools:targetApi="31"
@@ -78,22 +82,54 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <!--  OpenId Credential Offer scheme (OID4VCI) -->
                 <data android:scheme="openid-credential-offer"/>
+                <!--  High Assurance Interoperability Profile -->
+                <data android:scheme="haip"/>
                 <!-- Accept all hosts for any of the defined schemes above -->
                 <data android:host="*"/>
             </intent-filter>
-
+            
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Custom URI scheme -->
+                <data android:scheme="multipaz-test-app"/>
+                <data android:host="landing"/>
+            </intent-filter>
         </activity>
 
         <activity
-            android:name=".CredmanPresentmentActivity"
+            android:name=".TestAppCredentialManagerPresentmentActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
-            android:launchMode="singleInstance">
+            android:theme="@android:style/Theme.Translucent"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true">
             <intent-filter>
                 <action android:name="androidx.credentials.registry.provider.action.GET_CREDENTIAL" />
                 <action android:name="androidx.identitycredentials.action.GET_CREDENTIALS" />
                 <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".TestAppUriSchemePresentmentActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density|fontScale|fontWeightAdjustment|keyboard|layoutDirection|locale|mcc|navigation|smallestScreenSize|touchscreen|uiMode"
+            android:theme="@android:style/Theme.Translucent"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!--  Various OpenID4VP schemes -->
+                <data android:scheme="haip"/>
+                <data android:scheme="openid4vp"/>
+                <data android:scheme="eudi-openid4vp"/>
+                <data android:scheme="mdoc-openid4vp"/>
+                <!-- Accept all hosts for any of the defined schemes above -->
+                <data android:host="*"/>
             </intent-filter>
         </activity>
 
@@ -102,7 +138,7 @@
                    user data it might be a privacy problem to show PII on the lock screen.
         -->
         <activity
-            android:name=".NfcPresentmentActivity"
+            android:name=".TestAppMdocNfcPresentmentActivity"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:exported="true"
@@ -112,7 +148,7 @@
         </activity>
 
         <service
-            android:name=".NdefService"
+            android:name=".TestAppMdocNdefService"
             android:exported="true"
             android:label="@string/nfc_ndef_service_description"
             android:permission="android.permission.BIND_NFC_SERVICE">
@@ -144,7 +180,7 @@
         </service>
 
         <service
-            android:name=".MdocNfcDataTransferService"
+            android:name=".TestAppMdocNfcDataTransferService"
             android:exported="true"
             android:label="@string/nfc_ndef_service_description"
             android:permission="android.permission.BIND_NFC_SERVICE">

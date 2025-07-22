@@ -1,8 +1,10 @@
 import CryptoKit
+import UIKit
 import Foundation
 import Security
 import LocalAuthentication
 import DeviceCheck
+import CoreImage
 
 @objc public class SwiftBridge : NSObject {
     @objc(sha1:) public class func sha1(data: Data) -> Data {
@@ -43,21 +45,30 @@ import DeviceCheck
         return Data(mac)
     }
     
-    @objc(aesGcmEncrypt: : :) public class func aesGcmEncrypt(key: Data, plainText: Data, nonce: Data) -> Data {
+    @objc(aesGcmEncrypt: : : :) public class func aesGcmEncrypt(key: Data, plainText: Data, nonce: Data, aad: Data?) -> Data {
         let symmetricKey = SymmetricKey(data: key)
-        let sealedBox = try! AES.GCM.seal(plainText, using: symmetricKey, nonce: AES.GCM.Nonce(data: nonce))
-        var ret = sealedBox.ciphertext
-        ret.append(sealedBox.tag)
-        return ret
+        if (aad != nil) {
+            let sealedBox = try! AES.GCM.seal(plainText, using: symmetricKey, nonce: AES.GCM.Nonce(data: nonce), authenticating: aad!)
+            var ret = sealedBox.ciphertext
+            ret.append(sealedBox.tag)
+            return ret
+        } else {
+            let sealedBox = try! AES.GCM.seal(plainText, using: symmetricKey, nonce: AES.GCM.Nonce(data: nonce))
+            var ret = sealedBox.ciphertext
+            ret.append(sealedBox.tag)
+            return ret
+        }
     }
     
-    @objc(aesGcmDecrypt: : :) public class func aesGcmDecrypt(key: Data, cipherText: Data, nonce: Data) -> Data? {
+    @objc(aesGcmDecrypt: : : : :) public class func aesGcmDecrypt(key: Data, cipherText: Data, tag: Data, nonce: Data, aad: Data?) -> Data? {
         let symmetricKey = SymmetricKey(data: key)
-        var combined = nonce
-        combined.append(cipherText)
-        let sealedBox = try! AES.GCM.SealedBox(combined: combined)
+        let sealedBox = try! AES.GCM.SealedBox(nonce: AES.GCM.Nonce(data: nonce), ciphertext: cipherText, tag: tag)
         do {
-            return try AES.GCM.open(sealedBox, using: symmetricKey)
+            if (aad != nil) {
+                return try AES.GCM.open(sealedBox, using: symmetricKey, authenticating: aad!)
+            } else {
+                return try AES.GCM.open(sealedBox, using: symmetricKey)
+            }
         } catch {
             return nil
         }
@@ -454,6 +465,33 @@ import DeviceCheck
         var error: Unmanaged<CFError>? = nil
         guard SecKeyVerifySignature(key!, algorithm, message as CFData, signature as CFData, &error) else {
             return error!.takeRetainedValue() as Error
+        }
+        return nil
+    }
+
+    @objc(generateQrCode:) public class func generateQrCode(url: String) -> UIImage? {
+        let data = url.data(using: String.Encoding.ascii)
+        if let filter = CIFilter(name: "CIQRCodeGenerator") {
+            filter.setValue(data, forKey: "inputMessage")
+            let scalingFactor = 4.0
+            let transform = CGAffineTransform(scaleX: scalingFactor, y: scalingFactor)
+            if let output = filter.outputImage?.transformed(by: transform) {
+                // iOS QR Code generator doesn't add the proper Quiet Zone so we need
+                // to do this ourselves. Add four modules as required by the standard.
+                //
+                let quietZonePadding = 4*scalingFactor
+                let context = CIContext()
+                let cgImage = context.createCGImage(
+                    output,
+                    from: CGRect(
+                        x: -quietZonePadding,
+                        y: -quietZonePadding,
+                        width: output.extent.width + 2*quietZonePadding,
+                        height: output.extent.height + 2*quietZonePadding
+                    )
+                )
+                return UIImage(cgImage: cgImage!)
+            }
         }
         return nil
     }

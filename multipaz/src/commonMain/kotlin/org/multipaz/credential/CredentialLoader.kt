@@ -17,6 +17,9 @@ package org.multipaz.credential
 
 import org.multipaz.cbor.Cbor
 import org.multipaz.document.Document
+import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
+import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import kotlin.reflect.KClass
 
 /**
@@ -27,20 +30,55 @@ import kotlin.reflect.KClass
  * which can be added using the [addCredentialImplementation] method. In addition,
  * applications may add their own [Credential] implementations.
  */
-class CredentialLoader {
+internal class CredentialLoader {
     private val createCredentialFunctions:
             MutableMap<String, suspend (Document) -> Credential> = mutableMapOf()
 
     /**
-     * Add a new [Credential] implementation to the repository.
+     * Add a new [Credential] implementation to the loader.
      *
      * @param credentialType the credential type
      * @param createCredentialFunction a function to create a [Credential] of the given type.
      */
     fun addCredentialImplementation(
-        credentialType: KClass<out Credential>,
+        credentialType: String,
         createCredentialFunction: suspend (Document) -> Credential
-    ) = createCredentialFunctions.put(credentialType.simpleName!!, createCredentialFunction)
+    ) {
+        if (createCredentialFunctions.contains(credentialType)) {
+            throw IllegalArgumentException("'$credentialType' is already registered")
+        }
+        createCredentialFunctions[credentialType] = createCredentialFunction
+    }
+
+    /**
+     * Adds [MdocCredential] implementation to the loader.
+     */
+    fun addMdocCredential() {
+        addCredentialImplementation(
+            credentialType = MdocCredential.CREDENTIAL_TYPE,
+            createCredentialFunction = { document -> MdocCredential(document) }
+        )
+    }
+
+    /**
+     * Adds [KeyBoundSdJwtVcCredential] implementation to the loader.
+     */
+    fun addKeyBoundSdJwtVcCredential() {
+        addCredentialImplementation(
+            credentialType = KeyBoundSdJwtVcCredential.CREDENTIAL_TYPE,
+            createCredentialFunction = { document -> KeyBoundSdJwtVcCredential(document) }
+        )
+    }
+
+    /**
+     * Adds [KeylessSdJwtVcCredential] implementation to the loader.
+     */
+    fun addKeylessSdJwtVcCredential() {
+        addCredentialImplementation(
+            credentialType = KeylessSdJwtVcCredential.CREDENTIAL_TYPE,
+            createCredentialFunction = { document -> KeylessSdJwtVcCredential(document) }
+        )
+    }
 
     /**
      * Loads a [Credential] from storage
@@ -59,6 +97,10 @@ class CredentialLoader {
         val credential = createCredentialFunction.invoke(document)
         credential._identifier = identifier
         credential.deserialize(dataItem)
+        if (credential.credentialType != credentialType) {
+            throw IllegalStateException(
+                "Inconsistent credential type: '$credentialType' vs '${credential.credentialType}")
+        }
         return credential
     }
 }
