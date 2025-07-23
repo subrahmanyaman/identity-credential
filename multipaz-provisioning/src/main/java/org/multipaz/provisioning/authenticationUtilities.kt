@@ -21,7 +21,7 @@ suspend fun validateDeviceAssertionBindingKeys(
     deviceAssertion: DeviceAssertion,
     nonce: ByteString?
 ): AssertionBindingKeys {
-    val settings = WalletServerSettings(BackendEnvironment.getInterface(Configuration::class)!!)
+    val settings = ProvisioningBackendSettings(BackendEnvironment.getInterface(Configuration::class)!!)
     if (BackendEnvironment.getInterface(ApplicationSupport::class) == null) {
         // No ApplicationSupport is indication that we are running on the server, not
         // locally in app. Device assertion validation is only meaningful or possible

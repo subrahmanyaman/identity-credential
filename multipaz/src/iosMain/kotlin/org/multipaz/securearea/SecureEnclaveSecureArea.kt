@@ -8,7 +8,6 @@ import org.multipaz.crypto.EcSignature
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
-import org.multipaz.util.Logger
 import kotlinx.io.bytestring.ByteString
 
 /**
@@ -85,6 +84,12 @@ class SecureEnclaveSecureArea private constructor(
             // only key settings can really be honored).
             SecureEnclaveCreateKeySettings.Builder()
                 .setAlgorithm(createKeySettings.algorithm)
+                .setUserAuthenticationRequired(
+                    required = createKeySettings.userAuthenticationRequired,
+                    userAuthenticationTypes = setOf(
+                        SecureEnclaveUserAuthType.USER_PRESENCE
+                    )
+                )
                 .build()
         }
 
@@ -96,7 +101,7 @@ class SecureEnclaveSecureArea private constructor(
             settings.algorithm,
             accessControlCreateFlags
         )
-        Logger.d(TAG, "EC key with alias '$alias' created")
+        //Logger.d(TAG, "EC key with alias '$alias' created")
         val newAlias = insertKey(alias, settings, keyBlob, pubKey)
         return getKeyInfo(newAlias)
     }

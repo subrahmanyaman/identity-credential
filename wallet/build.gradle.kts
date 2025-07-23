@@ -19,10 +19,6 @@ buildConfig {
 
 kotlin {
     jvmToolchain(17)
-
-    compilerOptions {
-        allWarningsAsErrors = true
-    }
 }
 
 android {
@@ -87,6 +83,10 @@ android {
         // TODO: We should reenabe this warning in case other private keys are leaked,
         // but we need a way to indicate that these two are expected.
         disable += "PackagedPrivateKey"
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 

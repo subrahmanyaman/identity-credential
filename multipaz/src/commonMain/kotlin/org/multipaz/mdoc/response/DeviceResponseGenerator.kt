@@ -24,6 +24,7 @@ import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
+import org.multipaz.mdoc.zkp.ZkDocument
 
 /**
  * Helper class for building `DeviceResponse` [CBOR](http://cbor.io/)
@@ -37,6 +38,8 @@ import org.multipaz.cbor.putCborMap
  */
 class DeviceResponseGenerator(private val mStatusCode: Long) {
     private val mDocumentsBuilder = CborArray.builder()
+    private val mZkDocumentBuilder = CborArray.builder()
+    private var mDocumentsAdded = false;
 
     /**
      * Adds a new document to the device response.
@@ -142,6 +145,7 @@ class DeviceResponseGenerator(private val mStatusCode: Long) {
                 }
             }
         )
+        mDocumentsAdded = true
     }
 
     /**
@@ -152,15 +156,27 @@ class DeviceResponseGenerator(private val mStatusCode: Long) {
      * @param encodedDocument the bytes of `Document` CBOR as defined in ISO/IEC
      * 18013-5 section 8.3.2.1.2.2.
      * @return the generator.
+     * @throws IllegalStateException if ZK documents have already been added.
      */
     fun addDocument(encodedDocument: ByteArray) = apply {
         mDocumentsBuilder.add(Cbor.decode(encodedDocument))
+        mDocumentsAdded = true
+    }
+
+    /** Adds a new ZK document to the devices response.
+     *
+     * @params zkDocument the zkDocument to be added to the request.
+     * @throws IllegalStateException if the non-ZK documents have already been added.
+     */
+    fun addZkDocument(zkDocument: ZkDocument) = apply {
+        mZkDocumentBuilder.add(zkDocument.toDataItem())
+        mDocumentsAdded = true
     }
 
     /**
      * Checks if any documents have been added to the device response.
      */
-    fun isEmpty(): Boolean = mDocumentsBuilder.isEmpty()
+    fun isEmpty(): Boolean = mDocumentsBuilder.isEmpty() && mZkDocumentBuilder.isEmpty()
 
     /**
      * Builds the `DeviceResponse` CBOR.
@@ -170,11 +186,19 @@ class DeviceResponseGenerator(private val mStatusCode: Long) {
     fun generate(): ByteArray = Cbor.encode(
         buildCborMap {
             put("version", "1.0")
-            put("documents", mDocumentsBuilder.end().build())
-            // TODO: The documentErrors map entry should only be present if there is a non-zero
-            //  number of elements in the array. Right now we don't have a way for the application
-            //  to convey document errors but when we add that API we'll need to do something so
-            //  it is included here.
+            if (mDocumentsAdded) {
+                if (!mDocumentsBuilder.isEmpty()) {
+                    put("documents", mDocumentsBuilder.end().build())
+                    // TODO: The documentErrors map entry should only be present if there is a non-zero
+                    //  number of elements in the array. Right now we don't have a way for the application
+                    //  to convey document errors but when we add that API we'll need to do something so
+                    //  it is included here.
+                }
+                if (!mZkDocumentBuilder.isEmpty()) {
+                    put("zkDocuments", mZkDocumentBuilder.end().build())
+                }
+            }
+
             put("status", mStatusCode)
         }
     )

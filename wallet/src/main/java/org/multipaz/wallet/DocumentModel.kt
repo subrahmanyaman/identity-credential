@@ -51,10 +51,8 @@ import org.multipaz.wallet.provisioning.remote.WalletServerProvider
 import org.multipaz.mdoc.mso.MobileSecurityObjectParser
 import org.multipaz.mdoc.mso.StaticAuthDataParser
 import org.multipaz.mdoc.request.DeviceRequestParser
-import org.multipaz.sdjwt.SdJwtVerifiableCredential
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
-import org.multipaz.sdjwt.vc.JwtBody
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.KeyInvalidatedException
 import org.multipaz.securearea.KeyLockedException
@@ -89,6 +87,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.io.bytestring.ByteString
+import org.multipaz.rpc.handler.RpcAuthClientSession
+import org.multipaz.sdjwt.SdJwt
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.time.Duration
@@ -458,14 +458,11 @@ class DocumentModel(
 
         val kvPairs = mutableMapOf<String, String>()
 
-        val sdJwt = SdJwtVerifiableCredential.fromString(
-            String(sdJwtVcCredential.issuerProvidedData, Charsets.US_ASCII)
-        )
-        val body = JwtBody.fromString(sdJwt.body)
+        val sdJwt = SdJwt(String(sdJwtVcCredential.issuerProvidedData, Charsets.US_ASCII))
 
-        kvPairs.put("Issuer", body.issuer)
-        kvPairs.put("Document Type", body.docType)
-        kvPairs.put("Digest Hash Algorithm", body.sdHashAlg.toString())
+        kvPairs.put("Issuer", sdJwt.issuer)
+        kvPairs.put("Document Type", sdJwt.credentialType!!)
+        kvPairs.put("Digest Hash Algorithm", sdJwt.digestAlg.description)
 
         if (sdJwtVcCredential is SecureAreaBoundCredential) {
             addSecureAreaBoundCredentialInfo(sdJwtVcCredential, kvPairs)
@@ -482,9 +479,9 @@ class DocumentModel(
             format = CredentialFormat.SD_JWT_VC,
             description = "IETF SD-JWT Verifiable Credential",
             usageCount = sdJwtVcCredential.usageCount,
-            signedAt = body.timeSigned,
-            validFrom = body.timeValidityBegin,
-            validUntil = body.timeValidityEnd,
+            signedAt = sdJwt.issuedAt,
+            validFrom = sdJwt.validFrom,
+            validUntil = sdJwt.validUntil,
             expectedUpdate = null,
             replacementPending = replacement != null,
             details = kvPairs
@@ -631,23 +628,32 @@ class DocumentModel(
     // For every event, we  initiate a sequence of calls into the issuer to get the latest.
     private fun startListeningForNotifications(issuingAuthorityId: String) {
         CoroutineScope(Dispatchers.IO).launch {
-            val issuingAuthority = walletServerProvider.getIssuingAuthority(issuingAuthorityId)
-            Logger.i(TAG, "collecting notifications for $issuingAuthorityId...")
-            issuingAuthority.collect { notification ->
-                Logger.i(
-                    TAG,
-                    "received notification $issuingAuthorityId.${notification.documentId}"
-                )
-                // Find the local [Document] instance, if any
-                try {
-                    for (id in documentStore.listDocuments()) {
-                        val document = documentStore.lookupDocument(id)
-                        if (document?.issuingAuthorityIdentifier == issuingAuthorityId &&
-                            document.documentIdentifier == notification.documentId
-                        ) {
-                            Logger.i(TAG, "Handling issuer update on ${notification.documentId}")
-                            documentsToUpdate.send(id)
+            withContext(RpcAuthClientSession()) {
+                val issuingAuthority = walletServerProvider.getIssuingAuthority(issuingAuthorityId)
+                Logger.i(TAG, "collecting notifications for $issuingAuthorityId...")
+                issuingAuthority.collect { notification ->
+                    Logger.i(
+                        TAG,
+                        "received notification $issuingAuthorityId.${notification.documentId}"
+                    )
+                    // Find the local [Document] instance, if any
+                    try {
+                        for (id in documentStore.listDocuments()) {
+                            val document = documentStore.lookupDocument(id)
+                            if (document?.issuingAuthorityIdentifier == issuingAuthorityId &&
+                                document.documentIdentifier == notification.documentId
+                            ) {
+                                Logger.i(
+                                    TAG,
+                                    "Handling issuer update on ${notification.documentId}"
+                                )
+                                documentsToUpdate.send(id)
+                            }
                         }
+                    } catch (err: CancellationException) {
+                        throw err
+                    } catch (err: Throwable) {
+                        Logger.e(TAG, "Error processing notification", err)
                     }
                 } catch (err: CancellationException) {
                     throw err
@@ -723,7 +729,9 @@ class DocumentModel(
      */
     private suspend fun syncDocumentWithIssuer(document: Document) {
         try {
-            syncDocumentWithIssuerCore(document)
+            withContext(RpcAuthClientSession()) {
+                syncDocumentWithIssuerCore(document)
+            }
         } catch (e: IssuingAuthorityException) {
             // IssuingAuthorityException contains human-readable message
             walletApplication.postNotificationForDocument(document, e.message!!)
@@ -738,6 +746,7 @@ class DocumentModel(
             Logger.i(TAG, "syncDocumentWithIssuer: issuing authority is not initialized")
             return
         }
+
         val issuer = walletServerProvider.getIssuingAuthority(issuingAuthorityId)
 
         // Download latest issuer configuration.

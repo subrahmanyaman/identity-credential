@@ -44,6 +44,7 @@ enum class OID(
     X509_EXTENSION_BASIC_CONSTRAINTS("2.5.29.19", "basicConstraints (X.509 extension)"),
     X509_EXTENSION_SUBJECT_KEY_IDENTIFIER("2.5.29.14", "subjectKeyIdentifier (X.509 extension)"),
     X509_EXTENSION_AUTHORITY_KEY_IDENTIFIER("2.5.29.35", "authorityKeyIdentifier (X.509 extension)"),
+    X509_EXTENSION_SUBJECT_ALT_NAME("2.5.29.17", "subjectAltName (X.509 extension)"),
     X509_EXTENSION_ISSUER_ALT_NAME("2.5.29.18", "issuerAltName (X.509 extension)"),
     X509_EXTENSION_CRL_DISTRIBUTION_POINTS("2.5.29.31", "cRLDistributionPoints (X.509 extension)"),
     X509_EXTENSION_ANDROID_KEYSTORE_ATTESTATION("1.3.6.1.4.1.11129.2.1.17", "Android Keystore Key Attestation (X.509 extension)"),
@@ -51,6 +52,7 @@ enum class OID(
     X509_EXTENSION_MULTIPAZ_KEY_ATTESTATION("1.3.6.1.4.1.11129.2.1.49", "Multipaz Key Attestation (X.509 extension)"),
 
     ISO_18013_5_MDL_DS("1.0.18013.5.1.2", "Mobile Driving Licence (mDL) Document Signer (DS)"),
+    ISO_18013_5_MDL_READER_AUTH("1.0.18013.5.1.6", "Mobile Driving Licence (mDL) Reader Auth"),
 
     ;
 

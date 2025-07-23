@@ -11,15 +11,45 @@ val projectVersionCode: Int by extra {
     stdout.toString().trim().toInt()
 }
 
-// For versionName, we use the output of: git describe --tags --dirty
-val projectVersionName: String by extra {
+// The version number of the project.
+//
+// For a tagged release, projectVersionNext should be blank and the next commit
+// following the release should bump it to the next version number.
+//
+val projectVersionLast = "0.92.1"
+val projectVersionNext = "0.93.0"
+
+private fun runCommand(args: List<String>): String {
     val stdout = ByteArrayOutputStream()
     rootProject.exec {
-        commandLine("git", "describe", "--tags", "--dirty")
+        commandLine(args)
         standardOutput = stdout
     }
-    @Suppress("DEPRECATION") // toString() is deprecated.
-    stdout.toString().trim()
+    return stdout.toString().trim()
+}
+
+// Generate a project version meeting the requirements of Semantic Versioning 2.0.0
+// according to https://semver.org/
+//
+// Essentially, for tagged releases use the version number e.g. "0.91.0". Otherwise use
+// the next version number with a pre-release string set to "pre.N.H" where N is the
+// number of commits since the last version and H is the short commit hash of the
+// where we cut the pre-release from. Example: 0.91.0-pre.48.574b479c
+//
+val projectVersionName: String by extra {
+    if (projectVersionNext.isEmpty()) {
+        projectVersionLast
+    } else {
+        val numCommitsSinceTag = runCommand(listOf("git", "rev-list", "${projectVersionLast}..", "--count"))
+        val commitHash = runCommand(listOf("git", "rev-parse", "--short", "HEAD"))
+        projectVersionNext + "-pre.${numCommitsSinceTag}.${commitHash}"
+    }
+}
+
+tasks.register("printVersionName") {
+    doLast {
+        println(projectVersionName)
+    }
 }
 
 plugins {
@@ -35,4 +65,6 @@ plugins {
     alias(libs.plugins.navigation.safe.args) apply false
     alias(libs.plugins.parcelable) apply false
     alias(libs.plugins.buildconfig) apply false
+    alias(libs.plugins.kotlinCocoapods) apply false
+    alias(libs.plugins.skie) apply false
 }

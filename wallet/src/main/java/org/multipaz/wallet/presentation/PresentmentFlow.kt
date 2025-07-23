@@ -1,6 +1,9 @@
 package org.multipaz.wallet.presentation
 
 import androidx.fragment.app.FragmentActivity
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.securearea.AndroidKeystoreKeyUnlockData
 import org.multipaz.securearea.AndroidKeystoreSecureArea
 import org.multipaz.securearea.UserAuthenticationType
@@ -18,20 +21,19 @@ import org.multipaz.mdoc.mso.MobileSecurityObjectParser
 import org.multipaz.mdoc.mso.StaticAuthDataParser
 import org.multipaz.mdoc.response.DocumentGenerator
 import org.multipaz.mdoc.util.MdocUtil
-import org.multipaz.sdjwt.SdJwtVerifiableCredential
 import org.multipaz.securearea.KeyLockedException
 import org.multipaz.securearea.KeyUnlockData
 import org.multipaz.securearea.software.SoftwareKeyInfo
 import org.multipaz.securearea.software.SoftwareKeyUnlockData
 import org.multipaz.securearea.software.SoftwareSecureArea
-import org.multipaz.util.Logger
 import org.multipaz.wallet.R
 import org.multipaz.wallet.ui.prompt.biometric.showBiometricPrompt
 import org.multipaz.request.MdocRequest
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Request
 import org.multipaz.request.RequestedClaim
-import org.multipaz.request.VcRequest
+import org.multipaz.request.JsonRequest
+import org.multipaz.sdjwt.SdJwt
 import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.wallet.ui.prompt.consent.ConsentDocument
 import org.multipaz.wallet.ui.prompt.consent.showConsentPrompt
@@ -219,7 +221,7 @@ suspend fun showMdocPresentmentFlow(
 
 suspend fun showSdJwtPresentmentFlow(
     activity: FragmentActivity,
-    request: VcRequest,
+    request: JsonRequest,
     trustPoint: TrustPoint?,
     document: ConsentDocument,
     credential: Credential,
@@ -233,31 +235,23 @@ suspend fun showSdJwtPresentmentFlow(
         document,
         credential
     ) { keyUnlockData: KeyUnlockData? ->
-        val sdJwt = SdJwtVerifiableCredential.fromString(
-            String(credential.issuerProvidedData, Charsets.US_ASCII))
+        val sdJwt = SdJwt(String(credential.issuerProvidedData, Charsets.US_ASCII))
 
-        val requestedAttributes = request.requestedClaims.map { it.claimName }.toSet()
-        Logger.i(
-            TAG, "Filtering requested attributes (${requestedAttributes.joinToString()}) " +
-                    "from disclosed attributes (${sdJwt.disclosures.joinToString { it.key }})")
-        val filteredSdJwt = sdJwt.discloseOnly(requestedAttributes)
-        Logger.i(TAG, "Remaining disclosures: ${filteredSdJwt.disclosures.joinToString { it.key }}")
-        if (filteredSdJwt.disclosures.isEmpty()) {
-            // This is going to cause problems with the encoding and decoding. We should
-            // cancel the submission, since we can't fulfill any of the requested
-            // information.
-            // TODO: Handle this cancellation better.
-            Logger.e(TAG, "No disclosures remaining.")
-        }
+        val requestedAttributes = request.requestedClaims.map { it.claimPath[0].jsonPrimitive.content }.toSet()
+        val filteredSdJwt = sdJwt.filter(
+            includeDisclosure = { path: JsonArray, value: JsonElement ->
+                path.size == 1 && requestedAttributes.contains(path[0].jsonPrimitive.content)
+            }
+        )
 
-        val secureAreaBoundCredential = credential as? SecureAreaBoundCredential
-        filteredSdJwt.createPresentation(
-            secureAreaBoundCredential?.secureArea,
-            secureAreaBoundCredential?.alias,
-            keyUnlockData,
-            nonce,
-            clientId
-        ).toString().toByteArray(Charsets.US_ASCII)
+        val secureAreaBoundCredential = credential as SecureAreaBoundCredential
+        filteredSdJwt.present(
+            kbSecureArea = secureAreaBoundCredential.secureArea,
+            kbAlias = secureAreaBoundCredential.alias,
+            kbKeyUnlockData = keyUnlockData,
+            nonce = nonce,
+            audience = clientId
+        ).compactSerialization.toByteArray(Charsets.US_ASCII)
     }
 }
 

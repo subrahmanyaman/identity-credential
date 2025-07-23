@@ -1,6 +1,5 @@
 import org.gradle.kotlin.dsl.dependencies
 import org.gradle.kotlin.dsl.get
-import org.gradle.kotlin.dsl.implementation
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.konan.target.HostManager
@@ -81,6 +80,12 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.ktor.client.core)
+                api(libs.kotlinx.io.bytestring)
+                api(libs.kotlinx.io.core)
+                api(libs.kotlinx.datetime)
+                api(libs.kotlinx.coroutines.core)
+                api(libs.kotlinx.serialization.json)
+                api(libs.ktor.client.core)
             }
         }
 
@@ -97,8 +102,6 @@ kotlin {
         val javaSharedMain by creating {
             dependsOn(commonMain)
             dependencies {
-                implementation(libs.bouncy.castle.bcprov)
-                implementation(libs.bouncy.castle.bcpkix)
                 implementation(libs.tink)
                 // TODO: remove when JsonWebEncryption is implemented fully in Kotlin
                 implementation(libs.nimbus.oauth2.oidc.sdk)
@@ -108,9 +111,8 @@ kotlin {
         val jvmMain by getting {
             dependsOn(javaSharedMain)
             dependencies {
-                implementation(libs.bouncy.castle.bcprov)
-                implementation(libs.bouncy.castle.bcpkix)
                 implementation(libs.tink)
+                implementation(libs.ktor.client.java)
             }
         }
 
@@ -145,15 +147,18 @@ kotlin {
         }
 
         val androidInstrumentedTest by getting {
-            dependsOn(commonTest)
             dependencies {
                 implementation(libs.androidx.sqlite)
                 implementation(libs.androidx.sqlite.framework)
                 implementation(libs.androidx.sqlite.bundled)
                 implementation(libs.androidx.test.junit)
                 implementation(libs.androidx.espresso.core)
+                implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.coroutines.test)
                 implementation(libs.kotlinx.coroutines.android)
                 implementation(libs.ktor.client.mock)
+                implementation(libs.bouncy.castle.bcprov)
+                implementation(libs.bouncy.castle.bcpkix)
                 implementation(project(":multipaz-csa"))
             }
         }
@@ -215,6 +220,10 @@ android {
         singleVariant("release") {
             withSourcesJar()
         }
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 }
 

@@ -25,10 +25,11 @@ import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.security.keystore.UserNotAuthenticatedException;
 import android.util.AtomicFile;
-import android.util.Log;
 import android.util.Pair;
 
 import androidx.annotation.NonNull;
+
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -40,6 +41,7 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import org.multipaz.util.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -347,6 +349,7 @@ class CredentialData {
         }
     }
 
+    @CanIgnoreReturnValue
     static CredentialData createCredentialData(@NonNull Context context,
                                                @NonNull File storageDirectory,
                                                @NonNull String docType,
@@ -603,9 +606,13 @@ class CredentialData {
         CredentialData data = new CredentialData(context, storageDirectory, credentialName);
         String dataKeyAlias = getDataKeyAliasFromCredentialName(credentialName);
         try {
-            data.loadFromDisk(dataKeyAlias);
+            if (!data.loadFromDisk(dataKeyAlias)) {
+                Logger.INSTANCE.e(TAG, "Error loading file from disk. Deleting anyway.");
+                file.delete();
+                return null;
+            }
         } catch (RuntimeException e) {
-            Log.e(TAG, "Error parsing file on disk (old version?). Deleting anyway.");
+            Logger.INSTANCE.e(TAG, "Error parsing file on disk (old version?). Deleting anyway.");
             file.delete();
             return null;
         }
@@ -666,9 +673,9 @@ class CredentialData {
         CredentialData data = new CredentialData(context, storageDirectory, credentialName);
         String dataKeyAlias = getDataKeyAliasFromCredentialName(credentialName);
         try {
-            data.loadFromDisk(dataKeyAlias);
+            var unused = data.loadFromDisk(dataKeyAlias);
         } catch (RuntimeException e) {
-            Log.e(TAG, "Error parsing file on disk (old version?). Deleting anyway.");
+            Logger.INSTANCE.e(TAG, "Error parsing file on disk (old version?). Deleting anyway.");
         }
         file.delete();
 
@@ -1372,7 +1379,7 @@ class CredentialData {
                      */
                     kpg.initialize(builder.build());
                     kpg.generateKeyPair();
-                    Log.i(TAG, "AuthKey created, strongBoxBacked=" + isStrongBoxBacked);
+                    Logger.INSTANCE.i(TAG, "AuthKey created, strongBoxBacked=" + isStrongBoxBacked);
 
                     X509Certificate certificate = generateAuthenticationKeyCert(
                             aliasForAuthKey, mCredentialKeyAlias, mProofOfProvisioningSha256);
@@ -1531,7 +1538,7 @@ class CredentialData {
                 return null;
             }
 
-            Log.i(TAG, "Using exhausted key.");
+            Logger.INSTANCE.i(TAG, "Using exhausted key.");
         }
 
         KeyStore.Entry entry = null;
@@ -1594,17 +1601,9 @@ class CredentialData {
             // We don't care about the cipherText, only whether the key is unlocked.
         } catch (UserNotAuthenticatedException e) {
             return false;
-        } catch (NoSuchPaddingException
-                | BadPaddingException
-                | NoSuchAlgorithmException
-                | CertificateException
-                | InvalidKeyException
-                | IOException
-                | IllegalBlockSizeException
-                | UnrecoverableEntryException
-                | KeyStoreException e) {
+        } catch (Throwable e) {
             // If this fails, it probably means authentication is needed...
-            Log.w(TAG, "Unexpected exception `" + e.getMessage()
+            Logger.INSTANCE.w(TAG, "Unexpected exception `" + e.getMessage()
                     + "`, assuming user not authenticated");
             return false;
         }

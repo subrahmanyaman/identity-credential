@@ -20,7 +20,6 @@ import android.preference.PreferenceManager
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.res.ResourcesCompat
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
@@ -34,13 +33,11 @@ import org.multipaz.android.direct_access.DirectAccessCredential
 import org.multipaz.context.initializeApplication
 import org.multipaz.securearea.AndroidKeystoreSecureArea
 import org.multipaz.securearea.cloud.CloudSecureArea
-import org.multipaz.credential.CredentialLoader
 import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
-import org.multipaz.crypto.X509Cert
 import org.multipaz.documenttype.knowntypes.EUCertificateOfResidence
 import org.multipaz.documenttype.knowntypes.GermanPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
@@ -49,28 +46,22 @@ import org.multipaz.documenttype.knowntypes.UtopiaNaturalization
 import org.multipaz.provisioning.WalletApplicationCapabilities
 import org.multipaz.wallet.provisioning.WalletDocumentMetadata
 import org.multipaz.wallet.provisioning.remote.WalletServerProvider
-import org.multipaz.mdoc.credential.MdocCredential
-import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.PromptModel
-import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
-import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.SecureAreaProvider
 import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.android.AndroidStorage
-import org.multipaz.trustmanagement.TrustManager
-import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.util.Logger
 import org.multipaz.wallet.dynamicregistration.PowerOffReceiver
 import org.multipaz.wallet.logging.EventLogger
-import org.multipaz.wallet.util.toByteArray
 import kotlinx.datetime.Clock
-import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.multipaz.document.buildDocumentStore
+import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.trustmanagement.TrustManagerLocal
 import java.io.File
 import java.net.URLDecoder
-import java.security.Security
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.hours
@@ -109,8 +100,8 @@ class WalletApplication : Application() {
 
 
     // immediate instantiations
-    val readerTrustManager = TrustManager()
-    val issuerTrustManager = TrustManager()
+    val readerTrustManager = TrustManagerLocal(EphemeralStorage())
+    val issuerTrustManager = TrustManagerLocal(EphemeralStorage())
 
     // lazy instantiations
     private val sharedPreferences: SharedPreferences by lazy {
@@ -121,7 +112,6 @@ class WalletApplication : Application() {
     lateinit var storage: Storage
     lateinit var documentTypeRepository: DocumentTypeRepository
     lateinit var secureAreaRepository: SecureAreaRepository
-    lateinit var credentialLoader: CredentialLoader
     lateinit var documentStore: DocumentStore
     lateinit var settingsModel: SettingsModel
     lateinit var documentModel: DocumentModel
@@ -142,12 +132,9 @@ class WalletApplication : Application() {
 
         // warm up Direct Access transport to prevent delays later
         initializeApplication(applicationContext)
-        DirectAccess.warmupTransport()
+        //DirectAccess.warmupTransport()
 
-        // This is needed to prefer BouncyCastle bundled with the app instead of the Conscrypt
-        // based implementation included in the OS itself.
-        Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
-        Security.addProvider(BouncyCastleProvider())
+        // Do NOT add BouncyCastle here - we want to use the normal AndroidOpenSSL JCA provider
 
         // init documentTypeRepository
         documentTypeRepository = DocumentTypeRepository()
@@ -176,10 +163,10 @@ class WalletApplication : Application() {
         }
 
         // init SecureAreaRepository
-        secureAreaRepository = SecureAreaRepository.build {
-            add(SoftwareSecureArea.create(storage))
-            add(secureAreaProvider.get())
-            addFactory(CloudSecureArea.IDENTIFIER_PREFIX) { identifier ->
+        secureAreaRepository = SecureAreaRepository.Builder()
+            .addProvider(SecureAreaProvider { SoftwareSecureArea.create(storage)})
+            .addProvider(secureAreaProvider)
+            .addFactory(CloudSecureArea.IDENTIFIER_PREFIX) { identifier ->
                 val queryString = identifier.substring(CloudSecureArea.IDENTIFIER_PREFIX.length + 1)
                 val params = queryString.split("&").map {
                     val parts = it.split("=", ignoreCase = false, limit = 2)
@@ -200,30 +187,18 @@ class WalletApplication : Application() {
                     Android
                 )
             }
-        }
-
-        // init credentialFactory
-        credentialLoader = CredentialLoader()
-        credentialLoader.addCredentialImplementation(MdocCredential::class) {
-            document -> MdocCredential(document)
-        }
-        credentialLoader.addCredentialImplementation(KeyBoundSdJwtVcCredential::class) {
-            document -> KeyBoundSdJwtVcCredential(document)
-        }
-        credentialLoader.addCredentialImplementation(KeylessSdJwtVcCredential::class) {
-            document -> KeylessSdJwtVcCredential(document)
-        }
-        credentialLoader.addCredentialImplementation(DirectAccessCredential::class) {
-            document -> DirectAccessCredential(document)
-        }
+            .build()
 
         // init documentStore
-        documentStore = DocumentStore(
+        documentStore = buildDocumentStore(
             storage = storage,
-            secureAreaRepository = secureAreaRepository,
-            credentialLoader = credentialLoader,
-            documentMetadataFactory = WalletDocumentMetadata::create
-        )
+            secureAreaRepository = secureAreaRepository
+        ) {
+            addCredentialImplementation(DirectAccessCredential.CREDENTIAL_TYPE) {
+                document -> DirectAccessCredential(document)
+            }
+            setDocumentMetadataFactory(WalletDocumentMetadata::create)
+        }
 
         // init Wallet Server
         walletServerProvider = WalletServerProvider(
@@ -235,6 +210,7 @@ class WalletApplication : Application() {
             getWalletApplicationInformation()
         }
 
+        /*
         // init TrustManager for readers (used in consent dialog)
         //
         readerTrustManager.addTrustPoint(
@@ -269,7 +245,9 @@ class WalletApplication : Application() {
                 )
             )
         }
+         */
 
+        /*
         // init TrustManager for issuers (used in reader)
         //
         val signedVical = SignedVical.parse(
@@ -289,7 +267,7 @@ class WalletApplication : Application() {
             certificateResourceId = R.raw.iaca_certificate,
             displayIconResourceId = R.drawable.owf_identity_credential_reader_display_icon
         )
-
+         */
 
         documentModel = DocumentModel(
             applicationContext,
@@ -333,6 +311,29 @@ class WalletApplication : Application() {
                 workRequest
             )
 
+        /*
+        CoroutineScope(Dispatchers.IO).launch {
+            val allocatedSlots = DirectAccess.enumerateAllocatedSlots();
+            if (allocatedSlots.isNotEmpty()) {
+                for (documentId in documentStore.listDocuments()) {
+                    documentStore.lookupDocument(documentId)?.let { document ->
+                        if (document.documentConfiguration.directAccessConfiguration != null) {
+                            val expectedSlot =
+                                document.walletDocumentMetadata.directAccessDocumentSlot
+                            // Only one document slot is currently supported. The list returned by
+                            // enumerateAllocatedSlots will always contain a single element.
+                            for (slot in allocatedSlots) {
+                                if (expectedSlot != slot) {
+                                    DirectAccess.clearDocumentSlot(slot);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        */
+
         powerOffReceiver = PowerOffReceiver()
         registerReceiver(powerOffReceiver, IntentFilter(Intent.ACTION_SHUTDOWN))
     }
@@ -366,6 +367,7 @@ class WalletApplication : Application() {
      *
      * This extension function belongs to WalletApplication so it can use context.resources.
      */
+    /*
     fun TrustManager.addTrustPoint(
         displayName: String,
         certificateResourceId: Int,
@@ -383,6 +385,7 @@ class WalletApplication : Application() {
             }
         )
     )
+     */
 
     fun postNotificationForMissingMdocProximityPermissions() {
         // Go to main page, the user can request the permission there
@@ -465,7 +468,7 @@ class WalletApplication : Application() {
             androidKeystoreAttestKeyAvailable = keystoreCapabilities.attestKeySupported,
             androidKeystoreStrongBoxAvailable = keystoreCapabilities.strongBoxSupported,
             androidIsEmulator = isProbablyRunningOnEmulator,
-            directAccessSupported = DirectAccess.isDirectAccessSupported,
+            directAccessSupported = false //DirectAccess.isDirectAccessSupported,
         )
     }
 

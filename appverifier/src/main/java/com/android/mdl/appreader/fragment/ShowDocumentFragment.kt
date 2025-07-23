@@ -32,6 +32,7 @@ import com.android.mdl.appreader.trustmanagement.getCommonName
 import com.android.mdl.appreader.util.FormatUtil
 import com.android.mdl.appreader.util.TransferStatus
 import com.android.mdl.appreader.util.logDebug
+import kotlinx.coroutines.runBlocking
 import java.security.MessageDigest
 import java.security.cert.X509Certificate
 
@@ -206,15 +207,21 @@ class ShowDocumentFragment : Fragment() {
         sb.append("Session encryption curve: <b>" + transferManager.getMdocSessionEncryptionCurve() + "</b><br>")
         sb.append("<br>")
 
+        if (documents.isEmpty()) {
+            sb.append("<h3>No documents received.</h3>")
+        }
+
         for (doc in documents) {
             sb.append("<h3>Doctype: <font color=\"$primaryColor\">${doc.docType}</font></h3>")
             val cc = doc.issuerCertificateChain.certificates
             var certChain: List<X509Cert> = cc
             val customValidators = CustomValidators.getByDocType(doc.docType)
-            val result = VerifierApp.trustManagerInstance.verify(
-                chain = certChain,
-                //customValidators = customValidators
-            )
+            val result = runBlocking {
+                VerifierApp.trustManagerInstance.verify(
+                    chain = certChain,
+                    //customValidators = customValidators
+                )
+            }
             if (result.trustChain != null) {
                 certChain = result.trustChain!!.certificates
             }

@@ -5,24 +5,19 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X509Cert
-import org.multipaz.device.AssertionDPoPKey
 import org.multipaz.device.DeviceAssertion
-import org.multipaz.device.DeviceAttestationAndroid
 import org.multipaz.rpc.annotation.RpcState
 import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.provisioning.ApplicationSupport
 import org.multipaz.provisioning.LandingUrlUnknownException
-import org.multipaz.provisioning.WalletServerSettings
 import org.multipaz.rpc.cache
 import org.multipaz.rpc.backend.getTable
-import org.multipaz.provisioning.openid4vci.toJson
 import org.multipaz.provisioning.validateDeviceAssertionBindingKeys
 import org.multipaz.securearea.KeyAttestation
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
 import org.multipaz.util.toBase64Url
-import org.multipaz.util.validateAndroidKeyAttestation
 import kotlinx.datetime.Clock
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonArray
@@ -102,33 +97,12 @@ class ApplicationSupportState(
     }
 
     override suspend fun createJwtClientAssertion(
-        keyAttestation: KeyAttestation,
-        keyAssertion: DeviceAssertion
+        authorizationServerUrl: String
     ): String {
-        checkClientId()
-        val deviceAttestation = RpcAuthInspectorAssertion.getClientDeviceAttestation(clientId)!!
-        deviceAttestation.validateAssertion(keyAssertion)
-
-        val assertion = keyAssertion.assertion as AssertionDPoPKey
-
-        if (deviceAttestation is DeviceAttestationAndroid) {
-            val settings = WalletServerSettings(BackendEnvironment.getInterface(Configuration::class)!!)
-            val certChain = keyAttestation.certChain!!
-            check(assertion.publicKey == certChain.certificates.first().ecPublicKey)
-            validateAndroidKeyAttestation(
-                certChain,
-                null,  // no challenge check needed
-                settings.androidRequireGmsAttestation,
-                settings.androidRequireVerifiedBootGreen,
-                settings.androidRequireAppSignatureCertificateDigests
-            )
-        }
-
-        check(keyAttestation.certChain!!.certificates[0].ecPublicKey == keyAttestation.publicKey)
-        return createJwtClientAssertion(keyAttestation.publicKey, assertion.targetUrl)
+        return createJwtClientAssertion(authorizationServerUrl)
     }
 
-    override suspend fun getClientAssertionId(targetIssuanceUrl: String): String {
+    override suspend fun getClientAssertionId(authorizationServerUrl: String): String {
         checkClientId()
         return MULTIPAZ_CLIENT_ID
     }
@@ -173,7 +147,7 @@ class ApplicationSupportState(
         val head = buildJsonObject {
             put("typ", JsonPrimitive("keyattestation+jwt"))
             put("alg", JsonPrimitive(alg))
-            put("jwk", publicKey.toJson(null))  // TODO: use x5c instead here?
+            put("jwk", publicKey.toJwk())  // TODO: use x5c instead here?
         }.toString().toByteArray().toBase64Url()
 
         val now = Clock.System.now()
@@ -181,7 +155,7 @@ class ApplicationSupportState(
         val expiration = now + 5.minutes
         val payload = buildJsonObject {
             put("iss", attestationData.clientId)
-            put("attested_keys", JsonArray(keyList.map { it.toJson(null) }))
+            put("attested_keys", JsonArray(keyList.map { it.toJwk() }))
             put("nonce", nonce)
             put("nbf", notBefore.epochSeconds)
             put("exp", expiration.epochSeconds)
@@ -205,6 +179,13 @@ class ApplicationSupportState(
         val signature = sig.toCoseEncoded().toBase64Url()
 
         return "$message.$signature"
+    }
+
+    override suspend fun createJwtClientAttestation(
+        keyAttestation: KeyAttestation,
+        deviceAssertion: DeviceAssertion
+    ): String {
+        throw IllegalArgumentException("not implemented")
     }
 
     // Not exposed as RPC!
@@ -245,7 +226,7 @@ class ApplicationSupportState(
         val head = buildJsonObject {
             put("typ", JsonPrimitive("JWT"))
             put("alg", JsonPrimitive(alg))
-            put("jwk", publicKey.toJson(null))
+            put("jwk", publicKey.toJwk())
         }.toString().toByteArray().toBase64Url()
 
         val now = Clock.System.now()
@@ -260,7 +241,7 @@ class ApplicationSupportState(
                 "sub" to JsonPrimitive(attestationData.clientId), // RFC 7523 Section 3, item 2.B
                 "cnf" to JsonObject(
                     mapOf(
-                        "jwk" to clientPublicKey.toJson(clientId)
+                        "jwk" to clientPublicKey.toJwk(additionalClaims = buildJsonObject { put("kid", JsonPrimitive(clientId)) })
                     )
                 ),
                 "nbf" to JsonPrimitive(notBefore.epochSeconds),

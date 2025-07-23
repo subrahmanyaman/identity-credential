@@ -39,6 +39,9 @@ import multipazproject.samples.testapp.generated.resources.app_icon
 import org.jetbrains.compose.resources.painterResource
 import org.multipaz.compose.decodeImage
 import org.multipaz.crypto.Algorithm
+import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.prompt.IosPromptModel
+import org.multipaz.prompt.PromptModel
 import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSUserDomainMask
@@ -58,10 +61,23 @@ actual val platformAppName = "Multipaz Test App"
 
 actual val platformAppIcon = Res.drawable.app_icon
 
+actual val platformPromptModel: PromptModel by lazy {
+    IosPromptModel()
+}
+
 actual val platform = Platform.IOS
 
 actual suspend fun platformInit() {
     // Nothing to do
+}
+
+actual suspend fun platformCryptoInit(settingsModel: TestAppSettingsModel) {
+    // Nothing to do
+}
+
+actual fun platformRestartApp() {
+    // Currently only needed on Android
+    TODO()
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -116,31 +132,7 @@ private fun openDatabase(): SQLiteConnection {
     return NativeSQLiteDriver().open(rootPath.path() + "/storage.db")
 }
 
-@OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
-private val iosStorage = SqliteStorage(
-    connection = openDatabase(),
-    // native sqlite crashes when used with Dispatchers.IO
-    coroutineContext = newSingleThreadContext("DB")
-)
-
-// SecureEnclaveSecureArea doesn't work on the iOS simulator so use SoftwareSecureArea there
-private val secureEnclaveSecureAreaProvider = SecureAreaProvider {
-    if (platformIsEmulator) {
-        SoftwareSecureArea.create(iosStorage)
-    } else {
-        SecureEnclaveSecureArea.create(iosStorage)
-    }
-}
-
-actual fun platformStorage(): Storage {
-    return iosStorage
-}
-
 actual fun platformHttpClientEngineFactory(): HttpClientEngineFactory<*> = Darwin
-
-actual fun platformSecureAreaProvider(): SecureAreaProvider<SecureArea> {
-    return secureEnclaveSecureAreaProvider
-}
 
 actual val platformSecureAreaHasKeyAgreement = true
 

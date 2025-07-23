@@ -57,8 +57,9 @@ interface StorageTable {
      *   at any moment.
      * - [data] the data to store.
      *
-     * Returns the key for the newly-inserted record. Generated keys only contain ASCII
-     * alphanumeric characters.
+     * Returns the key for the newly-inserted record. Generated keys only contain letters, digits,
+     * and characters '_' and '-' (base64url character set). This restriction does not apply to
+     * the user-provided keys.
      */
     suspend fun insert(
         key: String?,
@@ -137,4 +138,16 @@ interface StorageTable {
         afterKey: String? = null,
         limit: Int = Int.MAX_VALUE
     ): List<String>
+
+    /**
+     * Enumerate the records with given table and partitionId in key lexicographic order.
+     *
+     * This is similar to [enumerate], but it returns key/data pairs stored in the table rather
+     * than just keys.
+     */
+    suspend fun enumerateWithData(
+        partitionId: String? = null,
+        afterKey: String? = null,
+        limit: Int = Int.MAX_VALUE
+    ): List<Pair<String, ByteString>>
 }

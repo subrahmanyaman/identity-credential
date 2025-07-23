@@ -19,7 +19,6 @@ package com.android.identity.android.legacy;
 import android.content.Context;
 import android.icu.util.Calendar;
 import android.security.keystore.KeyProperties;
-import android.util.Log;
 import android.util.Pair;
 
 import androidx.annotation.NonNull;
@@ -28,6 +27,7 @@ import androidx.biometric.BiometricPrompt;
 
 import org.multipaz.document.DocumentStore;
 import org.multipaz.document.NameSpacedData;
+import org.multipaz.util.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -673,7 +673,7 @@ class KeystoreIdentityCredential extends IdentityCredential {
 
         final boolean perPresentationAuthObtained = didUserAuth();
 
-        Log.d(TAG, "checkAccessSingleProfile id " + profile.mAccessControlProfileId.getId()
+        Logger.INSTANCE.d(TAG, "checkAccessSingleProfile id " + profile.mAccessControlProfileId.getId()
             + " user_auth " + profile.isUserAuthenticationRequired()
             + " perPresentationAuthObtained " + perPresentationAuthObtained);
         if (profile.isUserAuthenticationRequired()) {
@@ -851,5 +851,19 @@ class KeystoreIdentityCredential extends IdentityCredential {
             throw new IllegalStateException("Error loading data");
         }
         return mData.getCredentialKeyAlias();
+    }
+
+    @Override
+    @Nullable
+    public byte[] peekNextAuthenticationKey() {
+        Pair<PrivateKey, byte[]> authKeyPair =
+            mData.selectAuthenticationKey(
+                /* allowUsingExhaustedKeys= */ false,
+                /* allowUsingExpiredKeys= */ false,
+                /* incrementKeyUsageCount= */ false);
+        if (authKeyPair != null) {
+          return authKeyPair.second;
+        }
+        return null;
     }
 }

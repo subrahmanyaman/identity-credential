@@ -1,10 +1,10 @@
 package org.multipaz.sdjwt.credential
 
+import kotlinx.serialization.json.JsonObject
 import org.multipaz.cbor.CborBuilder
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.MapBuilder
-import org.multipaz.claim.Claim
-import org.multipaz.claim.VcClaim
+import org.multipaz.claim.JsonClaim
 import org.multipaz.credential.SecureAreaBoundCredential
 import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentTypeRepository
@@ -19,6 +19,53 @@ import org.multipaz.securearea.SecureArea
 class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
     companion object {
         private const val TAG = "SdJwtVcCredential"
+        const val CREDENTIAL_TYPE: String = "KeyBoundSdJwtVcCredential"
+
+        /**
+         * Creates a batch of [KeyBoundSdJwtVcCredential] instances with keys created in a single batch operation.
+         *
+         * This method optimizes the key creation process by using the secure area's batch key creation
+         * functionality, which is more efficient than creating keys individually, especially for
+         * hardware-backed secure areas where multiple cryptographic operations can be expensive.
+         *
+         * All credentials in the batch will share the same domain and credential type (vct),
+         * but will have unique keys and identifiers.
+         *
+         * @param numberOfCredentials The number of credentials to create in the batch.
+         * @param document The document to add the credentials to.
+         * @param domain The domain for all credentials in the batch.
+         * @param secureArea The secure area to use for creating keys.
+         * @param vct The Verifiable Credential Type for all credentials in the batch.
+         * @param createKeySettings The settings to use for key creation, including algorithm parameters.
+         * @return A pair containing:
+         *   - A list of created [KeyBoundSdJwtVcCredential] instances, ready to be certified
+         *   - An optional string containing the compact serialization of a JWS with OpenID4VCI key attestation
+         *     data if supported by the secure area.
+         */
+        suspend fun createBatch(
+            numberOfCredentials: Int,
+            document: Document,
+            domain: String,
+            secureArea: SecureArea,
+            vct: String,
+            createKeySettings: CreateKeySettings
+        ): Pair<List<KeyBoundSdJwtVcCredential>, String?> {
+            val batchResult = secureArea.batchCreateKey(numberOfCredentials, createKeySettings)
+            val credentials = batchResult.keyInfos
+                .map { it.alias }
+                .map { keyAlias ->
+                    KeyBoundSdJwtVcCredential(
+                        document = document,
+                        asReplacementForIdentifier = null,
+                        domain = domain,
+                        secureArea = secureArea,
+                        vct = vct,
+                    ).apply {
+                        useExistingKey(keyAlias)
+                    }
+                }
+            return Pair(credentials, batchResult.openid4vciKeyAttestationJws)
+        }
 
         suspend fun create(
             document: Document,
@@ -92,7 +139,10 @@ class KeyBoundSdJwtVcCredential : SecureAreaBoundCredential, SdJwtVcCredential {
         builder.put("vct", vct)
     }
 
-    override fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<VcClaim> {
+    override val credentialType: String
+        get() = CREDENTIAL_TYPE
+
+    override fun getClaims(documentTypeRepository: DocumentTypeRepository?): List<JsonClaim> {
         return getClaimsImpl(documentTypeRepository)
     }
 }

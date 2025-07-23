@@ -16,33 +16,48 @@
 
 package org.multipaz.documenttype
 
+import kotlinx.datetime.Instant
 import org.multipaz.cbor.DataItem
 import kotlinx.serialization.json.JsonElement
+import org.multipaz.cbor.Bstr
+import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.RawCbor
+import org.multipaz.cbor.Tagged
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.toDataItem
+import org.multipaz.cose.Cose
+import org.multipaz.cose.CoseLabel
+import org.multipaz.cose.CoseNumberLabel
+import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.X509CertChain
+import org.multipaz.document.Document
+import org.multipaz.mdoc.credential.MdocCredential
+import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
+import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
+import org.multipaz.securearea.CreateKeySettings
+import org.multipaz.securearea.SecureArea
 
 /**
- * Class representing the metadata of a Document Type
+ * Class representing the metadata of a Document Type.
  *
- * Currently mdoc and W3C Verifiable Document data models
- * are supported. More document formats may be added in
- * the future.
+ * Currently ISO mdoc and JSON-based data models are supported. More document formats may be added in the future.
  *
- * A Document Type has different attributes. Each attribute
- * has a displayName which is short (1-3 words) and suitable
- * for displaying in the UI. There is also a description
- * which is a longer description of the attribute, typically
- * no more than one paragraph.
+ * A Document Type has different attributes. Each attribute has a displayName which is short (1-3 words) and suitable
+ * for displaying in the UI. There is also a description which is a longer description of the attribute, typically no
+ * more than one paragraph.
  *
  * @param displayName the name suitable for display, e.g. "Driving License".
  * @param cannedRequests sample [DocumentCannedRequest] for the Document Type.
- * @param mdocDocumentType metadata of an mDoc Document Type (optional).
- * @param vcDocumentType metadata of a W3C VC Document Type (optional).
+ * @param mdocDocumentType metadata of a ISO mdoc Document Type (optional).
+ * @param jsonDocumentType metadata of a JSON-based Document Type (optional).
  *
  */
 class DocumentType private constructor(
     val displayName: String,
     val cannedRequests: List<DocumentCannedRequest>,
     val mdocDocumentType: MdocDocumentType?,
-    val vcDocumentType: VcDocumentType?
+    val jsonDocumentType: JsonDocumentType?
 ) {
 
     /**
@@ -50,49 +65,49 @@ class DocumentType private constructor(
      *
      * @param displayName the name suitable for display of the Document Type.
      * @param mdocBuilder a builder for the [MdocDocumentType].
-     * @param vcBuilder a builder for the [VcDocumentType].
+     * @param jsonBuilder a builder for the [JsonDocumentType].
      */
     data class Builder(
         val displayName: String,
         var mdocBuilder: MdocDocumentType.Builder? = null,
-        var vcBuilder: VcDocumentType.Builder? = null
+        var jsonBuilder: JsonDocumentType.Builder? = null
     ) {
         private val sampleRequests = mutableListOf<DocumentCannedRequest>()
 
         /**
          * Initialize the [mdocBuilder].
          *
-         * @param mdocDocType the DocType of the mDoc.
+         * @param mdocDocType the DocType of the ISO mdoc.
          */
         fun addMdocDocumentType(mdocDocType: String) = apply {
             mdocBuilder = MdocDocumentType.Builder(mdocDocType)
         }
 
         /**
-         * Initialize the [vcBuilder].
+         * Initialize the [jsonBuilder].
          *
-         * @param vct the Verifiable Credential Type.
+         * @param type the document type.
          * @param keyBound whether credentials should be bound to a key residing on the device.
          */
-        fun addVcDocumentType(
-            vct: String,
+        fun addJsonDocumentType(
+            type: String,
             keyBound: Boolean,
         ) = apply {
-            vcBuilder = VcDocumentType.Builder(vct, keyBound = keyBound)
+            jsonBuilder = JsonDocumentType.Builder(type, keyBound = keyBound)
         }
 
         /**
-         * Add an attribute for both mDoc and VC, using the same identifier.
+         * Add an attribute for both ISO mdoc and JSON-based document, using the same identifier.
          *
          * @param type the datatype of this attribute.
-         * @param identifier the identifier of this attribute for both mDoc and VC.
+         * @param identifier the identifier of this attribute for both ISO mdoc and JSON-based credentials.
          * @param displayName a name suitable for display of the attribute.
          * @param description a description of the attribute.
-         * @param mandatory indication whether the mDoc attribute is mandatory.
-         * @param mdocNamespace the namespace of the mDoc attribute.
+         * @param mandatory indication whether the ISO mdoc attribute is mandatory.
+         * @param mdocNamespace the namespace of the ISO mdoc attribute.
          * @param icon the icon, if available.
          * @param sampleValueMdoc a sample value for the attribute for ISO mdoc credentials, if available.
-         * @param sampleValueVc a sample value for the attribute for VC credentials, if available.
+         * @param sampleValueJson a sample value for the attribute for JSON-based credentials, if available.
          */
         fun addAttribute(
             type: DocumentAttributeType,
@@ -103,38 +118,38 @@ class DocumentType private constructor(
             mdocNamespace: String,
             icon: Icon? = null,
             sampleValueMdoc: DataItem? = null,
-            sampleValueVc: JsonElement? = null,
+            sampleValueJson: JsonElement? = null,
         ) = apply {
-            addMdocAttribute(type, identifier, displayName, description, mandatory,
-                mdocNamespace, icon, sampleValueMdoc)
-            addVcAttribute(type, identifier, displayName, description, icon, sampleValueVc)
+            addMdocAttribute(type, identifier, displayName, description, mandatory, mdocNamespace, icon, sampleValueMdoc)
+            addJsonAttribute(type, identifier, displayName, description, icon, sampleValueJson)
         }
 
         /**
-         * Add an attribute for both mDoc and VC, using a different identifier.
+         * Add an attribute for both ISO mdoc and JSON-based, using a different identifier.
          *
          * @param type the datatype of this attribute.
-         * @param mdocIdentifier the identifier of this attribute for mDoc.
-         * @param vcIdentifier the identifier of this attribute for VC.
+         * @param mdocIdentifier the identifier of this attribute for ISO mdoc credentials, e.g. `age_over_18`.
+         * @param jsonIdentifier the identifier of this attribute for JSON-based credentials using `.` to separate
+         *   path components, e.g. `age_equal_or_over.18`.
          * @param displayName a name suitable for display of the attribute.
          * @param description a description of the attribute.
-         * @param mandatory indication whether the mDoc attribute is mandatory.
-         * @param mdocNamespace the namespace of the mDoc attribute.
+         * @param mandatory indication whether the ISO mdoc attribute is mandatory.
+         * @param mdocNamespace the namespace of the ISO mdoc attribute.
          * @param icon the icon, if available.
          * @param sampleValueMdoc a sample value for the attribute for ISO mdoc credentials, if available.
-         * @param sampleValueVc a sample value for the attribute for VC credentials, if available.
+         * @param sampleValueJson a sample value for the attribute for JSON-based credentials, if available.
          */
         fun addAttribute(
             type: DocumentAttributeType,
             mdocIdentifier: String,
-            vcIdentifier: String,
+            jsonIdentifier: String,
             displayName: String,
             description: String,
             mandatory: Boolean,
             mdocNamespace: String,
             icon: Icon? = null,
             sampleValueMdoc: DataItem? = null,
-            sampleValueVc: JsonElement? = null,
+            sampleValueJson: JsonElement? = null,
         ) = apply {
             addMdocAttribute(
                 type,
@@ -146,18 +161,18 @@ class DocumentType private constructor(
                 icon,
                 sampleValueMdoc
             )
-            addVcAttribute(type, vcIdentifier, displayName, description, icon, sampleValueVc)
+            addJsonAttribute(type, jsonIdentifier, displayName, description, icon, sampleValueJson)
         }
 
         /**
-         * Add an attribute for mDoc only.
+         * Add an attribute for ISO mdoc only.
          *
          * @param type the datatype of this attribute.
          * @param identifier the identifier of this attribute.
          * @param displayName a name suitable for display of the attribute.
          * @param description a description of the attribute.
-         * @param mandatory indication whether the mDoc attribute is mandatory.
-         * @param mdocNamespace the namespace of the mDoc attribute.
+         * @param mandatory indication whether the ISO mdoc attribute is mandatory.
+         * @param mdocNamespace the namespace of the ISO mdoc attribute.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
          */
@@ -180,20 +195,21 @@ class DocumentType private constructor(
                 mandatory,
                 icon,
                 sampleValue
-            ) ?: throw Exception("The mDoc Document Type was not initialized")
+            ) ?: throw Exception("The ISO mdoc Document Type was not initialized")
         }
 
         /**
-         * Add an attribute for VC only.
+         * Add an attribute for JSON-based only.
          *
          * @param type the datatype of this attribute.
-         * @param identifier the identifier of this attribute.
+         * @param identifier the identifier of this attribute using `.` to separate path components, e.g.
+         * `age_equal_or_over.18`.
          * @param displayName a name suitable for display of the attribute.
          * @param description a description of the attribute.
          * @param icon the icon, if available.
          * @param sampleValue a sample value for the attribute, if available.
          */
-        fun addVcAttribute(
+        fun addJsonAttribute(
             type: DocumentAttributeType,
             identifier: String,
             displayName: String,
@@ -201,8 +217,8 @@ class DocumentType private constructor(
             icon: Icon? = null,
             sampleValue: JsonElement? = null
         ) = apply {
-            vcBuilder?.addClaim(type, identifier, displayName, description, icon, sampleValue)
-                ?: throw Exception("The VC Document Type was not initialized")
+            jsonBuilder?.addClaim(type, identifier, displayName, description, icon, sampleValue)
+                ?: throw Exception("The JSON Document Type was not initialized")
         }
 
         /**
@@ -210,17 +226,20 @@ class DocumentType private constructor(
          *
          * @param id an identifier for the request.
          * @param displayName a short name explaining the request.
-         * @param mdocDataElements the mdoc data elements in the request, per namespace, with
-         * the intent to retain value. If the list of a namespace is empty, all defined data
-         * elements will be included with intent to retain set to false.
-         * @param vcClaims the VC claims in the request. If the list is empty, all defined
-         * claims will be included.
+         * @param mdocDataElements the mdoc data elements in the request, per namespace, with the intent to retain
+         *   value. If the list of a namespace is empty, all defined data elements will be included with intent to
+         *   retain set to false.
+         * @param mdocUseZkp `true` if the sample request should indicate a preference for use of Zero-Knowledge Proofs.
+         * @param jsonClaims the claim names for JSON-based credentials in the request. If the list is empty, all
+         *   defined claims will be included. Each claim name must use `.` to separate path components, e.g.
+         *   `age_equal_or_over.18`.
          */
         fun addSampleRequest(
             id: String,
             displayName: String,
             mdocDataElements: Map<String, Map<String, Boolean>>? = null,
-            vcClaims: List<String>? = null
+            mdocUseZkp: Boolean = false,
+            jsonClaims: List<String>? = null,
         ) = apply {
             val mdocRequest = if (mdocDataElements == null) {
                 null
@@ -238,23 +257,23 @@ class DocumentType private constructor(
                     }
                     nsRequests.add(MdocNamespaceRequest(namespace, map))
                 }
-                MdocCannedRequest(mdocBuilder!!.docType, nsRequests)
+                MdocCannedRequest(mdocBuilder!!.docType, mdocUseZkp, nsRequests)
             }
-            val vcRequest = if (vcClaims == null) {
+            val jsonRequest = if (jsonClaims == null) {
                 null
             } else {
-                val claims = if (vcClaims.isEmpty()) {
-                    vcBuilder!!.claims.values.toList()
+                val claims = if (jsonClaims.isEmpty()) {
+                    jsonBuilder!!.claims.values.toList()
                 } else {
                     val list = mutableListOf<DocumentAttribute>()
-                    for (claimName in vcClaims) {
-                        list.add(vcBuilder!!.claims[claimName]!!)
+                    for (claimName in jsonClaims) {
+                        list.add(jsonBuilder!!.claims[claimName]!!)
                     }
                     list
                 }
-                VcCannedRequest(vcBuilder!!.type, claims)
+                JsonCannedRequest(jsonBuilder!!.vct, claims)
             }
-            sampleRequests.add(DocumentCannedRequest(id, displayName, mdocRequest, vcRequest))
+            sampleRequests.add(DocumentCannedRequest(id, displayName, mdocRequest, jsonRequest))
         }
 
         /**
@@ -264,6 +283,113 @@ class DocumentType private constructor(
             displayName,
             sampleRequests,
             mdocBuilder?.build(),
-            vcBuilder?.build())
+            jsonBuilder?.build())
+    }
+
+    // TODO: also add createSdJwtVCWithSampleData()
+
+    /**
+     * Adds a [MdocCredential] to a [Document] with sample data for the document type.
+     *
+     * @param document the [Document] to add the credential to.
+     * @param secureArea the [SecureArea] to use for `DeviceKey`.
+     * @param createKeySettings the [CreateKeySettings] to use.
+     * @param dsKey the key to sign the MSO with.
+     * @param dsCertChain the certification for [dsKey]
+     * @param signedAt the time the MSO was signed.
+     * @param validFrom the time at which the credential is valid from.
+     * @param validUntil the time at which the credential is valid until.
+     * @param expectedUpdate the time at which to expect an update, or `null`.
+     * @param domain the domain to use for the credential.
+     * @return the [MdocCredential] that was added to [document].
+     */
+    suspend fun createMdocCredentialWithSampleData(
+        document: Document,
+        secureArea: SecureArea,
+        createKeySettings: CreateKeySettings,
+        dsKey: EcPrivateKey,
+        dsCertChain: X509CertChain,
+        signedAt: Instant,
+        validFrom: Instant,
+        validUntil: Instant,
+        expectedUpdate: Instant? = null,
+        domain: String = "mdoc",
+    ): MdocCredential {
+        require(mdocDocumentType != null)
+
+        val issuerNamespaces = buildIssuerNamespaces {
+            for ((nsName, ns) in mdocDocumentType.namespaces) {
+                addNamespace(nsName) {
+                    for ((deName, de) in ns.dataElements) {
+                        val sampleValue = de.attribute.sampleValueMdoc
+                        if (sampleValue != null) {
+                            addDataElement(deName, sampleValue)
+                        }
+                    }
+                }
+            }
+        }
+
+        val mdocCredential = MdocCredential.create(
+            document = document,
+            asReplacementForIdentifier = null,
+            domain = domain,
+            secureArea = secureArea,
+            docType = mdocDocumentType.docType,
+            createKeySettings = createKeySettings
+        )
+
+        // Generate an MSO and issuer-signed data for this authentication key.
+        val msoGenerator = MobileSecurityObjectGenerator(
+            Algorithm.SHA256,
+            mdocDocumentType.docType,
+            mdocCredential.getAttestation().publicKey
+        )
+        msoGenerator.setValidityInfo(signedAt, validFrom, validUntil, expectedUpdate)
+        msoGenerator.addValueDigests(issuerNamespaces)
+
+        val mso = msoGenerator.generate()
+        val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
+
+        // IssuerAuth is a COSE_Sign1 where payload is MobileSecurityObjectBytes
+        //
+        // MobileSecurityObjectBytes = #6.24(bstr .cbor MobileSecurityObject)
+        //
+        val protectedHeaders = mapOf<CoseLabel, DataItem>(
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_ALG),
+                Algorithm.ES256.coseAlgorithmIdentifier!!.toDataItem()
+            )
+        )
+        val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
+            Pair(
+                CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
+                dsCertChain.toDataItem()
+            )
+        )
+        val encodedIssuerAuth = Cbor.encode(
+            Cose.coseSign1Sign(
+                dsKey,
+                taggedEncodedMso,
+                true,
+                dsKey.publicKey.curve.defaultSigningAlgorithm,
+                protectedHeaders,
+                unprotectedHeaders
+            ).toDataItem()
+        )
+        val issuerProvidedAuthenticationData = Cbor.encode(
+            buildCborMap {
+                put("nameSpaces", issuerNamespaces.toDataItem())
+                put("issuerAuth", RawCbor(encodedIssuerAuth))
+            }
+        )
+
+        // Now that we have issuer-provided authentication data we ccan ertify the authentication key.
+        mdocCredential.certify(
+            issuerProvidedAuthenticationData,
+            validFrom,
+            validUntil
+        )
+        return mdocCredential
     }
 }

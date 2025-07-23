@@ -1,11 +1,9 @@
 package com.android.mdl.appreader
 
 import android.app.Application
-import com.android.identity.android.util.AndroidLogPrinter
 import org.multipaz.util.Logger
 import androidx.preference.PreferenceManager
 import org.multipaz.crypto.X509Cert
-import org.multipaz.crypto.javaX509Certificate
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
@@ -14,17 +12,20 @@ import org.multipaz.documenttype.knowntypes.VehicleRegistration
 import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.storage.GenericStorageEngine
 import org.multipaz.storage.StorageEngine
-import org.multipaz.trustmanagement.TrustManager
-import org.multipaz.trustmanagement.TrustPoint
 import com.android.mdl.appreader.settings.UserPreferences
+import com.android.mdl.appreader.trustmanagement.getSubjectKeyIdentifier
 import com.android.mdl.appreader.util.KeysAndCertificates
 import com.google.android.material.color.DynamicColors
-import org.bouncycastle.jce.provider.BouncyCastleProvider
+import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayInputStream
-import java.security.Security
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import kotlinx.io.files.Path
+import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.trustmanagement.TrustManagerLocal
+import org.multipaz.trustmanagement.TrustPointAlreadyExistsException
+import org.multipaz.trustmanagement.TrustMetadata
+import java.io.File
 
 class VerifierApp : Application() {
 
@@ -34,11 +35,14 @@ class VerifierApp : Application() {
     }
 
     private val trustManager by lazy {
-        TrustManager()
+        // We import certificates on every startup so no point in using persistent storage
+        TrustManagerLocal(EphemeralStorage())
     }
 
     private val certificateStorageEngine by lazy {
-        GenericStorageEngine(Path(getDir("Certificates", MODE_PRIVATE).name))
+        val certDir = getDir("Certificates", MODE_PRIVATE)
+        val certFile = "imported_certs"
+        GenericStorageEngine(Path(File(certDir, certFile).absolutePath))
     }
 
     private val documentTypeRepository by lazy {
@@ -47,36 +51,39 @@ class VerifierApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        Logger.setLogPrinter(AndroidLogPrinter())
-        // This is needed to prefer BouncyCastle bundled with the app instead of the Conscrypt
-        // based implementation included in the OS itself.
-        Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
-        Security.addProvider(BouncyCastleProvider())
+        // Do NOT add BouncyCastle here - we want to use the normal AndroidOpenSSL JCA provider
         DynamicColors.applyToActivitiesIfAvailable(this)
         userPreferencesInstance = userPreferences
         Logger.isDebugEnabled = userPreferences.isDebugLoggingEnabled()
         trustManagerInstance = trustManager
         certificateStorageEngineInstance = certificateStorageEngine
-        certificateStorageEngineInstance.enumerate().forEach {
-            val certificate = parseCertificate(certificateStorageEngineInstance.get(it)!!)
-            trustManagerInstance.addTrustPoint(TrustPoint(X509Cert(certificate.encoded)))
-        }
-        KeysAndCertificates.getTrustedIssuerCertificates(this).forEach {
-            trustManagerInstance.addTrustPoint(TrustPoint(X509Cert(it.encoded)))
-        }
-        val signedVical = SignedVical.parse(
-            resources.openRawResource(R.raw.austroad_test_event_vical_20241002).readBytes()
-        )
-        for (certInfo in signedVical.vical.certificateInfos) {
-            trustManagerInstance.addTrustPoint(
-                TrustPoint(
-                    certInfo.certificate,
-                    null,
-                    null
-                )
+        runBlocking {
+            certificateStorageEngineInstance.enumerate().forEach {
+                val certificate = parseCertificate(certificateStorageEngineInstance.get(it)!!)
+                try {
+                    trustManagerInstance.addX509Cert(X509Cert(certificate.encoded), TrustMetadata())
+                } catch (_: TrustPointAlreadyExistsException) {
+                    Logger.w(TAG, "Trust Point already exists for ski ${certificate.getSubjectKeyIdentifier()}")
+                }
+            }
+            KeysAndCertificates.getTrustedIssuerCertificates(this@VerifierApp).forEach {
+                try {
+                    trustManagerInstance.addX509Cert(X509Cert(it.encoded), TrustMetadata())
+                } catch (_: TrustPointAlreadyExistsException) {
+                    Logger.w(TAG, "Trust Point already exists for ski ${it.getSubjectKeyIdentifier()}")
+                }
+            }
+            val signedVical = SignedVical.parse(
+                resources.openRawResource(R.raw.austroad_test_event_vical_20241002).readBytes()
             )
+            for (certInfo in signedVical.vical.certificateInfos) {
+                try {
+                    trustManagerInstance.addX509Cert(certInfo.certificate, TrustMetadata())
+                } catch (_: TrustPointAlreadyExistsException) {
+                    Logger.w(TAG, "Trust Point already exists for ski ${certInfo.certificate.subjectKeyIdentifier}")
+                }
+            }
         }
-
 
         documentTypeRepositoryInstance = documentTypeRepository
         documentTypeRepositoryInstance.addDocumentType(DrivingLicense.getDocumentType())
@@ -86,9 +93,10 @@ class VerifierApp : Application() {
     }
 
     companion object {
+        private const val TAG = "VerifierApp"
 
         private lateinit var userPreferencesInstance: UserPreferences
-        lateinit var trustManagerInstance: TrustManager
+        lateinit var trustManagerInstance: TrustManagerLocal
         lateinit var certificateStorageEngineInstance: StorageEngine
         lateinit var documentTypeRepositoryInstance: DocumentTypeRepository
         fun isDebugLogEnabled(): Boolean {

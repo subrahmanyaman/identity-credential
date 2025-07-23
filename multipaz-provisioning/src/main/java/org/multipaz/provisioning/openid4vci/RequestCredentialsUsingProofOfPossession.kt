@@ -3,8 +3,6 @@ package org.multipaz.provisioning.openid4vci
 import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.device.DeviceAssertion
 import org.multipaz.rpc.annotation.RpcState
-import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.rpc.backend.getTable
 import org.multipaz.provisioning.CredentialConfiguration
 import org.multipaz.provisioning.CredentialFormat
 import org.multipaz.provisioning.CredentialRequest
@@ -61,7 +59,7 @@ class RequestCredentialsUsingProofOfPossession(
             val header = JsonObject(mapOf(
                 "typ" to JsonPrimitive("openid4vci-proof+jwt"),
                 "alg" to JsonPrimitive("ES256"),
-                "jwk" to request.secureAreaBoundKeyAttestation.publicKey.toJson(null)
+                "jwk" to request.secureAreaBoundKeyAttestation.publicKey.toJwk()
             )).toString().toByteArray().toBase64Url()
             val body = JsonObject(mapOf(
                 "iss" to JsonPrimitive(issuanceClientId),
