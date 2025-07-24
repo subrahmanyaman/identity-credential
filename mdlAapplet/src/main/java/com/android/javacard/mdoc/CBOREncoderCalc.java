@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.android.javacard.mdl;
+package com.android.javacard.mdoc;
 
 /**
  * This class extends encoder and it is used to calculate the total size required for encoded
@@ -22,28 +22,28 @@ package com.android.javacard.mdl;
  */
 public class CBOREncoderCalc extends CBOREncoder {
 
-  /** Increase the offset by one. */
-  public short writeRawByte(byte val) {
-    increaseOffset((short) 1);
-    return (short) 1;
-  }
+    /** Increase the offset by one. */
+    public short writeRawByte(byte val) {
+        increaseOffset((short)1);
+        return (short)1;
+    }
 
-  /** Increase the offset by two. */
-  short writeRawShort(short val) {
-    increaseOffset((short) 2);
-    return (short) 2;
-  }
+    /** Increase the offset by two. */
+    short writeRawShort(short val) {
+        increaseOffset((short)2);
+        return (short)2;
+    }
 
-  /**
-   * Increase the offset by its size.
-   *
-   * @param value Buffer array with the content
-   * @param offset Offset in input buffer
-   * @param length Length of data that should be encoded
-   * @return The current offset in the buffer
-   */
-  short writeRawByteArray(byte[] value, short offset, short length) {
-    increaseOffset(length);
-    return length;
-  }
+    /**
+     * Increase the offset by its size.
+     *
+     * @param value Buffer array with the content
+     * @param offset Offset in input buffer
+     * @param length Length of data that should be encoded
+     * @return The current offset in the buffer
+     */
+    short writeRawByteArray(byte[] value, short offset, short length) {
+        increaseOffset(length);
+        return length;
+    }
 }

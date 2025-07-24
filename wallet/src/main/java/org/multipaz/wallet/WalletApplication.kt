@@ -468,7 +468,7 @@ class WalletApplication : Application() {
             androidKeystoreAttestKeyAvailable = keystoreCapabilities.attestKeySupported,
             androidKeystoreStrongBoxAvailable = keystoreCapabilities.strongBoxSupported,
             androidIsEmulator = isProbablyRunningOnEmulator,
-            directAccessSupported = false //DirectAccess.isDirectAccessSupported,
+            directAccessSupported = true //DirectAccess.isDirectAccessSupported,
         )
     }
 

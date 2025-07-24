@@ -1,4 +1,4 @@
-package com.android.javacard.mdl;
+package com.android.javacard.mdoc;
 
 import android.content.Context;
 

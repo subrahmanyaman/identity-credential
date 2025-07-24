@@ -33,7 +33,6 @@ import kotlinx.datetime.format.char
 import kotlinx.datetime.until
 import kotlinx.io.bytestring.buildByteString
 import org.bouncycastle.asn1.ASN1UTCTime
-import org.multipaz.cbor.DataItem
 import org.multipaz.util.appendUInt16
 import org.multipaz.cbor.Uint
 import org.multipaz.util.getInt16

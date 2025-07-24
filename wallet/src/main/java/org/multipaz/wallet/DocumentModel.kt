@@ -655,10 +655,6 @@ class DocumentModel(
                     } catch (err: Throwable) {
                         Logger.e(TAG, "Error processing notification", err)
                     }
-                } catch (err: CancellationException) {
-                    throw err
-                } catch (err: Throwable) {
-                    Logger.e(TAG, "Error processing notification", err)
                 }
             }
         }

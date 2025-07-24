@@ -1,4 +1,4 @@
-package com.android.javacard.mdl;
+package com.android.javacard.mdoc;
 
 import javacard.framework.Util;
 
@@ -15,12 +15,11 @@ public class Buffer {
     private byte[] buffer = new byte[MAX_LEN];
     private byte[] internal = new byte[5120];
 
-
     private short copyLen(short bufLen) {
-        short copyLen = (short) buffer.length;
-        short len = (short) (curOff + 1);
+        short copyLen = (short)buffer.length;
+        short len = (short)(curOff + 1);
         if (len < buffer.length) {
-            copyLen = (short) (buffer.length - len);
+            copyLen = (short)(buffer.length - len);
         }
         if (bufLen < copyLen) {
             copyLen = bufLen;
@@ -28,9 +27,7 @@ public class Buffer {
         return copyLen;
     }
 
-    private boolean isBufferFull() {
-        return (curOff >= (short) (buffer.length - 1));
-    }
+    private boolean isBufferFull() { return (curOff >= (short)(buffer.length - 1)); }
 
     public short bufferData(byte[] buf, short start, short bufLen) {
         /*
@@ -46,31 +43,33 @@ public class Buffer {
         // Give space in buf for a minimum of bufLen to maximum of 16.
         short copyLen = copyLen(bufLen);
         // Backup of the input buf for copyLen
-        Util.arrayCopyNonAtomic(buf, (short) (start + (bufLen - copyLen)), internal, internalOff, copyLen);
+        Util.arrayCopyNonAtomic(buf, (short)(start + (bufLen - copyLen)), internal, internalOff,
+                                copyLen);
         // Shift the buf right only if the buf length is more than 16
         if (isBufferFull() && bufLen > buffer.length) {
-            Util.arrayCopyNonAtomic(buf, start, buf, (short) (start + copyLen), copyLen);
+            Util.arrayCopyNonAtomic(buf, start, buf, (short)(start + copyLen), copyLen);
         }
         // copy from buffered data to input data
         if (isBufferFull()) {
-            Util.arrayCopyNonAtomic(buffer, (short) 0, buf, start, copyLen);
+            Util.arrayCopyNonAtomic(buffer, (short)0, buf, start, copyLen);
         }
-        //shift the buffered data
+        // shift the buffered data
         if (isBufferFull() && copyLen < buffer.length) {
-            Util.arrayCopyNonAtomic(buffer, copyLen, buffer, (short) 0, (short) (buffer.length - copyLen));
+            Util.arrayCopyNonAtomic(buffer, copyLen, buffer, (short)0,
+                                    (short)(buffer.length - copyLen));
         }
         // copy the new data to buffered data
-        short dataOff = (short) (curOff + 1);
+        short dataOff = (short)(curOff + 1);
         if (isBufferFull()) {
-            dataOff = (short) (buffer.length - copyLen);
+            dataOff = (short)(buffer.length - copyLen);
         }
         Util.arrayCopyNonAtomic(internal, internalOff, buffer, dataOff, copyLen);
         // Update the length
         if (!isBufferFull()) {
             curOff += copyLen;
-            if (isBufferFull()) curOff = (short) (buffer.length - 1);
+            if (isBufferFull()) curOff = (short)(buffer.length - 1);
         }
-        return (short) (isBufferFull() ? bufLen : (bufLen - copyLen));
+        return (short)(isBufferFull() ? bufLen : (bufLen - copyLen));
     }
 
     public short clearBufferData(byte[] buf, short start, short len) {
@@ -78,9 +77,9 @@ public class Buffer {
             return len;
         }
         Util.arrayCopyNonAtomic(buf, start, internal, internalOff, len);
-        Util.arrayCopyNonAtomic(buffer, (short) 0, buf, start, (short) buffer.length);
-        Util.arrayCopyNonAtomic(internal, internalOff, buf, (short) (start + buffer.length), len);
+        Util.arrayCopyNonAtomic(buffer, (short)0, buf, start, (short)buffer.length);
+        Util.arrayCopyNonAtomic(internal, internalOff, buf, (short)(start + buffer.length), len);
         curOff = -1;
-        return (short) (len + buffer.length);
+        return (short)(len + buffer.length);
     }
 }

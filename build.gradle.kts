@@ -24,6 +24,7 @@ private fun runCommand(args: List<String>): String {
     rootProject.exec {
         commandLine(args)
         standardOutput = stdout
+        setIgnoreExitValue(true)
     }
     return stdout.toString().trim()
 }

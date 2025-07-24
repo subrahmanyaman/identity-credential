@@ -16,9 +16,9 @@
 package org.multipaz.android.direct_access
 
 import com.android.identity.android.util.NfcUtil
-import com.android.javacard.mdl.ndef.NdefTagApplet
-import com.android.javacard.mdl.presentation.PresentationApplet
-import com.android.javacard.mdl.provision.ProvisioningApplet
+import com.android.javacard.mdoc.ndef.NdefTagApplet
+import com.android.javacard.mdoc.presentation.PresentationApplet
+import com.android.javacard.mdoc.provision.ProvisioningApplet
 import com.licel.jcardsim.smartcardio.CardSimulator
 import com.licel.jcardsim.utils.AIDUtil
 import javacard.framework.AID
@@ -124,6 +124,7 @@ class DirectAccessSmartCardTransport {
 
         @Throws(IOException::class)
         fun openConnection() {
+            instance()
             if (!isInitialized) {
                 init()
             }

@@ -52,6 +52,9 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version("0.9.0")
 }
 
+include(":mdlAapplet")
+include(":JCardSim")
+include(":smartcardio")
 include(":multipaz-cbor-rpc")
 include(":multipaz")
 include(":multipaz:SwiftBridge")

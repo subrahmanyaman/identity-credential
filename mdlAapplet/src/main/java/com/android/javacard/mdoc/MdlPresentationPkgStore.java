@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.android.javacard.mdl;
+package com.android.javacard.mdoc;
 
 import javacard.framework.Shareable;
 
@@ -25,20 +25,19 @@ import javacard.framework.Shareable;
  */
 public interface MdlPresentationPkgStore extends Shareable {
 
-  byte SERVICE_ID = 2;
+    byte SERVICE_ID = 2;
 
-  void write(short slotId, byte[] buf, short start, short len);
+    void write(short slotId, byte[] buf, short start, short len);
 
-  short getUsageCount(short slotId);
+    short getUsageCount(short slotId);
 
-  void clearUsageCount(short slotId);
+    void clearUsageCount(short slotId);
 
-  void createPackage(short slotId, short size, byte[] docStr,
-                     short docStrStart, short docStrLen);
+    void createPackage(short slotId, short size, byte[] docStr, short docStrStart, short docStrLen);
 
-  void deletePackage(short slotId);
+    void deletePackage(short slotId);
 
-  void startProvisioning(short slotId);
+    void startProvisioning(short slotId);
 
-  void commitProvisioning(short slotId);
+    void commitProvisioning(short slotId);
 }

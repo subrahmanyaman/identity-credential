@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.android.javacard.mdl;
+package com.android.javacard.mdoc;
 
 import javacard.framework.Shareable;
 
@@ -24,7 +24,7 @@ import javacard.framework.Shareable;
  */
 public interface MdlService extends Shareable {
 
-  byte SERVICE_ID = 1;
+    byte SERVICE_ID = 1;
 
-  short getHandoverSelectMessage(byte[] buf, short start);
+    short getHandoverSelectMessage(byte[] buf, short start);
 }

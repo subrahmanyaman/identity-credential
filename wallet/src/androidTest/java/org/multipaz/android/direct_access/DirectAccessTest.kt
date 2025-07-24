@@ -41,6 +41,7 @@ import org.bouncycastle.operator.ContentSigner
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import org.junit.After
 import org.junit.Assert
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.multipaz.cbor.Bstr
@@ -55,7 +56,6 @@ import org.multipaz.context.initializeApplication
 import org.multipaz.cose.Cose
 import org.multipaz.cose.Cose.coseSign1Sign
 import org.multipaz.cose.CoseNumberLabel
-import org.multipaz.credential.CredentialLoader
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.EcPublicKey
@@ -66,7 +66,7 @@ import org.multipaz.crypto.javaPublicKey
 import org.multipaz.crypto.toEcPrivateKey
 import org.multipaz.document.DocumentStore
 import org.multipaz.document.NameSpacedData
-import org.multipaz.flow.server.Resources
+import org.multipaz.document.buildDocumentStore
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod.Companion.disambiguate
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
@@ -123,9 +123,9 @@ class DirectAccessTest {
     }
 
     private var context: Context = InstrumentationRegistry.getInstrumentation().targetContext
-    private var storage: Storage
-    private var secureAreaRepository: SecureAreaRepository
-    private var documentStore: DocumentStore
+    private lateinit var storage: Storage
+    private lateinit var secureAreaRepository: SecureAreaRepository
+    private lateinit var documentStore: DocumentStore
     private lateinit var readerKeys: ArrayList<KeyPair>
     private lateinit var readerCertChain: X509CertChain
 
@@ -177,24 +177,51 @@ class DirectAccessTest {
         return certChain
     }
 
-    init {
-        initializeApplication(context)
-        DirectAccessSmartCardTransport()
-        //assumeTrue(DirectAccess.isDirectAccessSupported)
-        storage = AndroidStorage(":memory:")
-        secureAreaRepository = SecureAreaRepository.build {
-            add(AndroidKeystoreSecureArea.create(storage))
+//    init {
+//        initializeApplication(context)
+//        DirectAccessSmartCardTransport()
+//
+//        documentStore = buildDocumentStore(
+//            storage = storage,
+//            secureAreaRepository = secureAreaRepository
+//        ) {
+//            addCredentialImplementation(DirectAccessCredential.CREDENTIAL_TYPE) {
+//                    document -> DirectAccessCredential(document)
+//            }
+//            setDocumentMetadataFactory(WalletDocumentMetadata::create)
+//        }
+//
+//        // generate reader certs
+//        try {
+//            val keyPair = generateEcdsaKeyPair()
+//            readerKeys = ArrayList()
+//            readerKeys.add(keyPair)
+//
+//            readerCertChain = getReaderCertificateChain(keyPair)
+//        } catch (e: Exception) {
+//            Assert.fail(e.message)
+//        }
+//    }
+
+    @Before
+    fun setup() {
+        runBlocking {
+            initializeApplication(InstrumentationRegistry.getInstrumentation().targetContext)
+            storage = AndroidStorage(":memory:")
+            secureAreaRepository = SecureAreaRepository.Builder()
+                .add(AndroidKeystoreSecureArea.create(storage))
+                .build()
+            DirectAccessSmartCardTransport()
         }
-        val credentialLoader: CredentialLoader = CredentialLoader()
-        credentialLoader.addCredentialImplementation(DirectAccessCredential::class) { document ->
-            DirectAccessCredential(document)
-        }
-        documentStore = DocumentStore(
+        documentStore = buildDocumentStore(
             storage = storage,
-            secureAreaRepository = secureAreaRepository,
-            credentialLoader = credentialLoader,
-            documentMetadataFactory = WalletDocumentMetadata::create
-        )
+            secureAreaRepository = secureAreaRepository
+        ) {
+            addCredentialImplementation(DirectAccessCredential.CREDENTIAL_TYPE) {
+                document -> DirectAccessCredential(document)
+            }
+            setDocumentMetadataFactory(WalletDocumentMetadata::create)
+        }
 
         // generate reader certs
         try {
@@ -207,6 +234,7 @@ class DirectAccessTest {
             Assert.fail(e.message)
         }
     }
+
 
     @After
     fun reset() {
