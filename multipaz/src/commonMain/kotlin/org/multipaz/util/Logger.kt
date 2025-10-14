@@ -17,7 +17,7 @@ package org.multipaz.util
 
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DiagnosticOption
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format
@@ -26,9 +26,11 @@ import kotlinx.io.Sink
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import org.multipaz.cbor.DataItem
 import org.multipaz.util.Logger.LogPrinter.Level
 
 /**
@@ -234,6 +236,25 @@ object Logger {
         cbor(Level.ERROR, tag, message, encodedCbor)
     }
 
+    fun dCbor(tag: String, message: String, dataItem: DataItem) {
+        if (isDebugEnabled) {
+            cbor(Level.DEBUG, tag, message, Cbor.encode(dataItem))
+        }
+    }
+
+    fun iCbor(tag: String, message: String, dataItem: DataItem) {
+        cbor(Level.INFO, tag, message, Cbor.encode(dataItem))
+    }
+
+    fun wCbor(tag: String, message: String, dataItem: DataItem) {
+        cbor(Level.WARNING, tag, message, Cbor.encode(dataItem))
+    }
+
+    fun eCbor(tag: String, message: String, dataItem: DataItem) {
+        cbor(Level.ERROR, tag, message, Cbor.encode(dataItem))
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
     private fun json(level: Level, tag: String, message: String, json: JsonElement) {
         val prettyJson = Json {
             prettyPrint = true

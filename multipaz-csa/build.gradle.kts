@@ -6,6 +6,10 @@ plugins {
 
 kotlin {
     jvmToolchain(17)
+
+    compilerOptions {
+        optIn.add("kotlin.time.ExperimentalTime")
+    }
 }
 
 java {
@@ -22,4 +26,8 @@ dependencies {
     ksp(project(":multipaz-cbor-rpc"))
 
     testImplementation(libs.kotlin.test)
+}
+
+subprojects {
+	apply(plugin = "org.jetbrains.dokka")
 }

@@ -2,7 +2,7 @@ package org.multipaz.models.presentment
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.encodeToString
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -25,7 +25,8 @@ import org.multipaz.document.Document
 import org.multipaz.mdoc.response.DeviceResponseParser
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.models.openid.OpenID4VP
-import org.multipaz.request.Request
+import org.multipaz.presentment.CredentialPresentmentData
+import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwtKb
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.TrustManagerLocal
@@ -52,16 +53,16 @@ class DigitalCredentialsPresentmentTest {
 
     class TestPresentmentMechanism(
         protocol: String,
-        data: String,
-        document: Document?,
+        data: JsonObject,
+        documents: List<Document>,
         var response: String? = null,
         var closed: Boolean = false
     ): DigitalCredentialsPresentmentMechanism(
         appId = APP_ID,
-        webOrigin = ORIGIN,
+        origin = ORIGIN,
         protocol = protocol,
         data = data,
-        document = document,
+        preselectedDocuments = documents,
     ) {
         override fun sendResponse(protocol: String, data: JsonObject) {
             this.response = Json.encodeToString(data)
@@ -73,8 +74,9 @@ class DigitalCredentialsPresentmentTest {
     }
 
     private data class ShownConsentPrompt(
-        val document: Document,
-        val request: Request,
+        val credentialPresentmentData: CredentialPresentmentData,
+        val preselectedDocuments: List<Document>,
+        val requester: Requester,
         val trustPoint: TrustPoint?
     )
 
@@ -93,8 +95,7 @@ class DigitalCredentialsPresentmentTest {
         dcql: JsonObject
     ): TestOpenID4VPResponse {
         documentStoreTestHarness.initialize()
-
-        val presentmentModel = PresentmentModel()
+        documentStoreTestHarness.provisionStandardDocuments()
 
         val readerTrustManager = TrustManagerLocal(EphemeralStorage())
         val presentmentSource = SimplePresentmentSource(
@@ -124,7 +125,7 @@ class DigitalCredentialsPresentmentTest {
             Pair(null, null)
         }
 
-        val requestString = OpenID4VP.generateRequest(
+        val request = OpenID4VP.generateRequest(
             version = version,
             origin = ORIGIN,
             clientId = CLIENT_ID,
@@ -137,7 +138,7 @@ class DigitalCredentialsPresentmentTest {
             responseMode = OpenID4VP.ResponseMode.DC_API,
             responseUri = null,
             dclqQuery = dcql
-        ).toString()
+        )
 
         val protocol = when (version) {
             OpenID4VP.Version.DRAFT_24 -> "openid4vp"
@@ -151,8 +152,8 @@ class DigitalCredentialsPresentmentTest {
         }
         val presentmentMechanism = TestPresentmentMechanism(
             protocol = protocol,
-            data = requestString,
-            document = null,
+            data = request,
+            documents = emptyList(),
         )
 
         val shownConsentPrompts = mutableListOf<ShownConsentPrompt>()
@@ -163,9 +164,9 @@ class DigitalCredentialsPresentmentTest {
             source = presentmentSource,
             mechanism = presentmentMechanism,
             dismissable = dismissable,
-            showConsentPrompt = { document, request, trustPoint ->
-                shownConsentPrompts.add(ShownConsentPrompt(document, request, trustPoint))
-                true
+            showConsentPrompt = { presentmentData, preselectedDocuments, requester, trustPoint ->
+                shownConsentPrompts.add(ShownConsentPrompt(presentmentData, preselectedDocuments, requester, trustPoint))
+                presentmentData.select(preselectedDocuments)
             }
         )
         val dcResponseObject = Json.decodeFromString(JsonObject.serializer(), presentmentMechanism.response!!)
@@ -304,6 +305,7 @@ class DigitalCredentialsPresentmentTest {
         )
     }
 
+    @OptIn(ExperimentalSerializationApi::class)
     suspend fun test_OpenID4VP_sdJwt(
         version: OpenID4VP.Version,
         signRequest: Boolean,
@@ -368,7 +370,7 @@ class DigitalCredentialsPresentmentTest {
                           "claims": [
                             { "path": ["org.iso.18013.5.1", "age_over_21"] },
                             { "path": ["org.iso.18013.5.1", "portrait"] }
-                    ]}]}                
+                    ]}]}
                 """.trimIndent().trim(),
             expectedMdocResponse =
                 """

@@ -12,7 +12,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.coroutines.delay
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.buildByteString
 import kotlinx.io.bytestring.decodeToString
@@ -76,6 +76,8 @@ import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.util.Logger
 import org.multipaz.util.appendUInt32
+import org.multipaz.certext.MultipazExtension
+import org.multipaz.certext.fromCbor
 import kotlin.random.Random
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -340,11 +342,12 @@ open class CloudSecureArea protected constructor(
             throw CloudException("Root X509Cert not authorized by app")
         }
 
-        val decodedAttestation = CloudAttestationExtension.decode(ByteString(
+        val decodedAttestation = MultipazExtension.fromCbor(
             attestation.certificates[0]
-                .getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_KEY_ATTESTATION.oid)!!
-        ))
-        check(decodedAttestation.challenge == ByteString(expectedDeviceChallenge)) {
+                .getExtensionValue(OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid)!!
+        )
+        check(decodedAttestation.cloudKeyAttestation != null &&
+                decodedAttestation.cloudKeyAttestation.challenge == ByteString(expectedDeviceChallenge)) {
             "Challenge in attestation does match what's expected"
         }
     }
@@ -505,7 +508,7 @@ open class CloudSecureArea protected constructor(
             createKeySettings
         } else {
             // Use default settings if user passed in a generic SecureArea.CreateKeySettings.
-            CloudCreateKeySettings.Builder(createKeySettings.nonce)
+            val builder = CloudCreateKeySettings.Builder(createKeySettings.nonce)
                 .setUserAuthenticationRequired(
                     required = createKeySettings.userAuthenticationRequired,
                     types = setOf(
@@ -513,7 +516,13 @@ open class CloudSecureArea protected constructor(
                         CloudUserAuthType.BIOMETRIC,
                     )
                 )
-                .build()
+            if (createKeySettings.validFrom != null && createKeySettings.validUntil != null) {
+                builder.setValidityPeriod(
+                    validFrom = createKeySettings.validFrom,
+                    validUntil = createKeySettings.validUntil
+                )
+            }
+            builder.build()
         }
         setupE2EE(false)
         try {
@@ -959,7 +968,7 @@ open class CloudSecureArea protected constructor(
     }
 
     @CborSerializable(
-        schemaHash = "05D8znv6joCoUVuDwC6vx-QB2kxFSChce08UfGvdQSg"
+        schemaHash = "1nfI37qZNUhsEDoWxGOOmH3_1Akqb8axdvs_i2PawpU"
     )
     internal data class KeyMetadata(
         val algorithm: Algorithm,

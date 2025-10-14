@@ -32,7 +32,7 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.newSingleThreadContext
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.app_icon
@@ -40,6 +40,7 @@ import org.jetbrains.compose.resources.painterResource
 import org.multipaz.compose.decodeImage
 import org.multipaz.crypto.Algorithm
 import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.IosPromptModel
 import org.multipaz.prompt.PromptModel
 import platform.Foundation.NSDocumentDirectory
@@ -136,28 +137,8 @@ actual fun platformHttpClientEngineFactory(): HttpClientEngineFactory<*> = Darwi
 
 actual val platformSecureAreaHasKeyAgreement = true
 
-actual fun platformCreateKeySettings(
-    challenge: ByteString,
-    algorithm: Algorithm,
-    userAuthenticationRequired: Boolean,
-    validFrom: Instant,
-    validUntil: Instant
-): CreateKeySettings {
-    // Note: Since iOS Secure Enclave doesn't generate key attestations [validFrom] and [validUntil]
-    // is not used. Neither is [challenge].
-    if (platformIsEmulator) {
-        return SoftwareCreateKeySettings.Builder()
-            .setAlgorithm(algorithm)
-            .setPassphraseRequired(userAuthenticationRequired, "1111", PassphraseConstraints.PIN_FOUR_DIGITS)
-            .build()
-    } else {
-        require(algorithm.curve!! == EcCurve.P256)
-        return SecureEnclaveCreateKeySettings.Builder()
-            .setAlgorithm(algorithm)
-            .setUserAuthenticationRequired(
-                required = userAuthenticationRequired,
-                userAuthenticationTypes = setOf(SecureEnclaveUserAuthType.USER_PRESENCE)
-            )
-            .build()
-    }
+actual fun getAppToAppOrigin(): String {
+    TODO("Add support for iOS")
 }
+
+actual suspend fun getExternalNfcTagReaders(): List<NfcTagReader> = emptyList()

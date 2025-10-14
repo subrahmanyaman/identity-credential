@@ -26,6 +26,7 @@ import org.multipaz.graphhash.Leaf
 import org.multipaz.graphhash.Node
 import org.multipaz.graphhash.UnassignedLoopException
 import java.security.MessageDigest
+import kotlin.collections.set
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.Base64.PaddingOption
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -52,8 +53,8 @@ class CborSymbolProcessor(
         const val TSTR_TYPE = "org.multipaz.cbor.Tstr"
         const val SIMPLE_TYPE = "org.multipaz.cbor.Simple"
         const val CBOR_MAP_TYPE = "org.multipaz.cbor.CborMap"
-        const val CBOR_ARRAY_TYPE = "org.multipaz.cbor.CborArray"
         const val BUILD_CBOR_ARRAY = "org.multipaz.cbor.buildCborArray"
+        const val BUILD_CBOR_MAP = "org.multipaz.cbor.buildCborMap"
         const val DATA_ITEM_CLASS = "org.multipaz.cbor.DataItem"
         const val BYTESTRING_TYPE = "kotlinx.io.bytestring.ByteString"
         const val TO_DATAITEM_DATETIMESTRING_FUN = "org.multipaz.cbor.toDataItemDateTimeString"
@@ -65,15 +66,31 @@ class CborSymbolProcessor(
         fun deserializeValue(
             codeBuilder: CodeBuilder,
             code: String,
-            type: KSType
+            type: KSType,
+            canBeNull: Boolean = false
         ): String {
             val declaration = type.declaration
+            val base = if (canBeNull && type.isMarkedNullable) {
+                "$code.asNullable?."
+            } else {
+                "$code."
+            }
             return when (val qualifiedName = declaration.qualifiedName!!.asString()) {
                 "kotlin.collections.Map", "kotlin.collections.MutableMap" ->
                     with(codeBuilder) {
                         val map = varName("map")
-                        line("val $map = mutableMapOf<${typeArguments(this, type)}>()")
-                        addDeserializedMapValues(this, map, code, type)
+                        val mutable = qualifiedName.contains("Mutable")
+                        block("val $map = ${base}let") {
+                            block(
+                                before = "buildMap<${typeArguments(this, type)}>",
+                                hasBlockAfter = mutable
+                            ) {
+                                addDeserializedMapValues(this, "", "it", type)
+                            }
+                            if (mutable) {
+                                finishLine(".toMutableMap()")
+                            }
+                        }
                         map
                     }
 
@@ -81,40 +98,63 @@ class CborSymbolProcessor(
                 "kotlin.collections.Set", "kotlin.collections.MutableSet" ->
                     with(codeBuilder) {
                         val array = varName("array")
-                        val builder = if (qualifiedName.endsWith("Set")) {
-                            "mutableSetOf"
-                        } else {
-                            "mutableListOf"
-                        }
-                        line("val $array = $builder<${typeArguments(this, type)}>()")
-                        block("for (value in $code.asArray)") {
-                            val value = deserializeValue(
-                                this, "value",
-                                type.arguments[0].type!!.resolve()
-                            )
-                            line("$array.add($value)")
+                        block("val $array = ${base}let") {
+                            val builder = if (qualifiedName.endsWith("Set")) {
+                                "buildSet<${typeArguments(this, type)}>"
+                            } else {
+                                "buildList<${typeArguments(this, type)}>"
+                            }
+                            val mutable = qualifiedName.contains("Mutable")
+                            block(builder, hasBlockAfter = mutable) {
+                                block(before = "for (value in it.asArray)") {
+                                    val value = deserializeValue(
+                                        this, "value",
+                                        type.arguments[0].type!!.resolve()
+                                    )
+                                    line("add($value)")
+                                }
+                            }
+                            if (mutable) {
+                                if (qualifiedName.endsWith("Set")) {
+                                    finishLine(".toMutableSet()")
+                                } else {
+                                    finishLine(".toMutableList()")
+                                }
+                            }
                         }
                         array
                     }
 
-                "kotlin.String" -> return "$code.asTstr"
-                "kotlin.ByteArray" -> return "$code.asBstr"
+                "kotlin.String" -> return "${base}asTstr"
+                "kotlin.ByteArray" -> return "${base}asBstr"
                 BYTESTRING_TYPE -> {
                     codeBuilder.importQualifiedName(BYTESTRING_TYPE)
-                    return "ByteString($code.asBstr)"
+                    return if (type.isMarkedNullable) {
+                        "${base}let { ByteString(it.asBstr) }"
+                    } else {
+                        "ByteString(${base}asBstr)"
+                    }
                 }
-                "kotlin.Long" -> return "$code.asNumber"
-                "kotlin.Int" -> return "$code.asNumber.toInt()"
-                "kotlin.Float" -> return "$code.asFloat"
-                "kotlin.Double" -> return "$code.asDouble"
-                "kotlin.Boolean" -> return "$code.asBoolean"
-                "kotlinx.datetime.Instant" -> "$code.asDateTimeString"
-                "kotlinx.datetime.LocalDate" -> "$code.asDateString"
+                "kotlin.Long" -> return "${base}asNumber"
+                "kotlin.Int" -> return if (type.isMarkedNullable) {
+                    "${base}asNumber?.toInt()"
+                } else {
+                    "${base}asNumber.toInt()"
+                }
+                "kotlin.Float" -> return "${base}asFloat"
+                "kotlin.Double" -> return "${base}asDouble"
+                "kotlin.Boolean" -> return "${base}asBoolean"
+                "kotlin.time.Instant" -> "${base}asDateTimeString"
+                "kotlin.time.LocalDate" -> "${base}asDateString"
                 DATA_ITEM_CLASS -> return code
                 else -> return if (declaration is KSClassDeclaration &&
                     declaration.classKind == ClassKind.ENUM_CLASS
                 ) {
-                    "${typeRef(codeBuilder, type)}.valueOf($code.asTstr)"
+                    if (type.isMarkedNullable) {
+                        "${base}let { ${typeRef(codeBuilder, type)}.valueOf(it.asTstr) }"
+                    } else {
+                        "${typeRef(codeBuilder, type)}.valueOf($code.asTstr)"
+                    }
                 } else {
                     codeBuilder.importQualifiedName(qualifiedName)
                     val deserializer = deserializerName(declaration as KSClassDeclaration, false)
@@ -125,6 +165,7 @@ class CborSymbolProcessor(
                             declaration.packageName.asString()
                         )
                     }
+
                     "${deserializer}($code)"
                 }
             }
@@ -132,7 +173,9 @@ class CborSymbolProcessor(
 
         private fun addDeserializedMapValues(
             codeBuilder: CodeBuilder,
-            targetCode: String, sourceCode: String, targetType: KSType,
+            targetCode: String,
+            sourceCode: String,
+            targetType: KSType,
             fieldNameSet: String? = null
         ) {
             val entry = codeBuilder.varName("entry")
@@ -151,7 +194,7 @@ class CborSymbolProcessor(
                     this, "$entry.value",
                     targetType.arguments[1].type!!.resolve()
                 )
-                line("$targetCode.put($key, $value)")
+                line("${targetCode}put($key, $value)")
             }
         }
 
@@ -193,20 +236,33 @@ class CborSymbolProcessor(
         fun serializeValue(
             codeBuilder: CodeBuilder,
             code: String,
-            type: KSType
+            type: KSType,
+            canBeNull: Boolean = false
         ): String {
             val declaration = type.declaration
             val declarationQualifiedName = declaration.qualifiedName
                 ?: throw NullPointerException("Declaration $declaration with null qualified name!")
+            val nullable = canBeNull && type.isMarkedNullable
+            val base = if (nullable) {
+                codeBuilder.importQualifiedName(SIMPLE_TYPE)
+                "$code?."
+            } else {
+                "$code."
+            }
             when (val qualifiedName = declarationQualifiedName.asString()) {
                 "kotlin.collections.Map", "kotlin.collections.MutableMap" ->
                     with(codeBuilder) {
                         val map = varName("map")
-                        val mapBuilder = varName("mapBuilder")
-                        importQualifiedName(CBOR_MAP_TYPE)
-                        line("val $mapBuilder = CborMap.builder()")
-                        addSerializedMapValues(this, mapBuilder, code, type)
-                        line("val $map: DataItem = $mapBuilder.end().build()")
+                        importQualifiedName(BUILD_CBOR_MAP)
+                        block("val $map = ${base}let", hasBlockAfter = nullable) {
+                            block("buildCborMap") {
+                                addSerializedMapValues(this, "", "it", type)
+                            }
+                        }
+                        if (nullable) {
+                            importQualifiedName(SIMPLE_TYPE)
+                            finishLine(" ?: Simple.NULL")
+                        }
                         return map
                     }
 
@@ -214,50 +270,86 @@ class CborSymbolProcessor(
                 "kotlin.collections.Set", "kotlin.collections.MutableSet" ->
                     with(codeBuilder) {
                         val array = varName("array")
-                        val arrayBuilder = varName("arrayBuilder")
-                        importQualifiedName(CBOR_ARRAY_TYPE)
-                        line("val $arrayBuilder = CborArray.builder()")
-                        block("for (value in $code)") {
-                            val value = serializeValue(
-                                this, "value",
-                                type.arguments[0].type!!.resolve()
-                            )
-                            line("$arrayBuilder.add($value)")
+                        importQualifiedName(BUILD_CBOR_ARRAY)
+                        block("val $array = ${base}let", hasBlockAfter = nullable) {
+                            block("buildCborArray") {
+                                block("for (value in it)") {
+                                    val value = serializeValue(
+                                        this, "value",
+                                        type.arguments[0].type!!.resolve()
+                                    )
+                                    line("add($value)")
+                                }
+                            }
                         }
-                        line("val $array: DataItem = $arrayBuilder.end().build()")
+                        if (nullable) {
+                            importQualifiedName(SIMPLE_TYPE)
+                            finishLine(" ?: Simple.NULL")
+                        }
                         return array
                     }
 
                 "kotlin.String" -> {
                     codeBuilder.importQualifiedName(TSTR_TYPE)
-                    return "Tstr($code)"
+                    return if (nullable) {
+                        codeBuilder.importQualifiedName(SIMPLE_TYPE)
+                        "${base}let { Tstr(it) } ?: Simple.NULL"
+                    } else {
+                        "Tstr($code)"
+                    }
                 }
                 "kotlin.ByteArray" -> {
                     codeBuilder.importQualifiedName(BSTR_TYPE)
-                    return "Bstr($code)"
+                    return if (nullable) {
+                        codeBuilder.importQualifiedName(SIMPLE_TYPE)
+                        "${base}let { Bstr(it) } ?: Simple.NULL"
+                    } else {
+                        "Bstr($code)"
+                    }
                 }
                 BYTESTRING_TYPE -> {
                     codeBuilder.importQualifiedName(BSTR_TYPE)
-                    return "Bstr($code.toByteArray())"
+                    return if (nullable) {
+                        codeBuilder.importQualifiedName(SIMPLE_TYPE)
+                        "${base}let { Bstr(it.toByteArray()) } ?: Simple.NULL"
+                    } else {
+                        "Bstr(${base}toByteArray())"
+                    }
                 }
                 "kotlin.Int" -> {
                     codeBuilder.importQualifiedName(TO_DATAITEM_FUN)
-                    return "$code.toLong().toDataItem()"
+                    return if (nullable) {
+                        "${base}toLong()?.toDataItem() ?: Simple.NULL"
+                    } else {
+                        "${base}toLong().toDataItem()"
+                    }
                 }
 
                 "kotlin.Long", "kotlin.Float", "kotlin.Double", "kotlin.Boolean" -> {
                     codeBuilder.importQualifiedName(TO_DATAITEM_FUN)
-                    return "$code.toDataItem()"
+                    return if (nullable) {
+                        "${base}toDataItem() ?: Simple.NULL"
+                    } else {
+                        "${base}toDataItem()"
+                    }
                 }
 
-                "kotlinx.datetime.Instant" -> {
+                "kotlin.time.Instant" -> {
                     codeBuilder.importQualifiedName(TO_DATAITEM_DATETIMESTRING_FUN)
-                    return "$code.toDataItemDateTimeString()"
+                    return if (nullable) {
+                        "${base}toDataItemDateTimeString() ?: Simple.NULL"
+                    } else {
+                        "${base}toDataItemDateTimeString()"
+                    }
                 }
 
                 "kotlinx.datetime.LocalDate" -> {
                     codeBuilder.importQualifiedName(TO_DATAITEM_FULLDATE_FUN)
-                    return "$code.toDataItemFullDate()"
+                    return if (nullable) {
+                        "${base}let { it.toDataItemFullDate() } ?: Simple.NULL"
+                    } else {
+                        "${base}toDataItemFullDate()"
+                    }
                 }
 
                 DATA_ITEM_CLASS -> return code
@@ -265,14 +357,22 @@ class CborSymbolProcessor(
                     declaration.classKind == ClassKind.ENUM_CLASS
                 ) {
                     codeBuilder.importQualifiedName(TSTR_TYPE)
-                    "Tstr($code.name)"
+                    if (nullable) {
+                        "${base}let { Tstr(it.name) } ?: Simple.NULL"
+                    } else {
+                        "Tstr($code.name)"
+                    }
                 } else {
                     codeBuilder.importQualifiedName(qualifiedName)
                     whenSerializationGenerated(declaration) { serializableDeclaration ->
                         codeBuilder.importFunctionName("toDataItem",
                             serializableDeclaration.packageName.asString())
                     }
-                    "$code.toDataItem()"
+                    if (nullable) {
+                        "${base}toDataItem() ?: Simple.NULL"
+                    } else {
+                        "${base}toDataItem()"
+                    }
                 }
             }
         }
@@ -309,7 +409,7 @@ class CborSymbolProcessor(
                     this, "entry.value",
                     sourceType.arguments[1].type!!.resolve()
                 )
-                line("$targetCode.put($key, $value)")
+                line("${targetCode}put($key, $value)")
             }
         }
 
@@ -376,7 +476,7 @@ class CborSymbolProcessor(
 
     private lateinit var resolver: Resolver
     private lateinit var schemaTypeInfoCache: MutableMap<String, SchemaTypeInfo>
-    private lateinit var compilationUnitClassMap: Map<String, KSClassDeclaration>
+    private lateinit var compilationUnitClassMap: MutableMap<String, KSClassDeclaration>
 
     /**
      * Processor main entry point.
@@ -418,7 +518,9 @@ class CborSymbolProcessor(
 
         val thisCompilationUnitClasses = allRegularClasses + allSealedSubclasses.keys +
                 allSealedSubclasses.values.flatten()
-        compilationUnitClassMap = thisCompilationUnitClasses.associateBy { it.qualifiedName!!.asString() }
+        compilationUnitClassMap =
+            thisCompilationUnitClasses.associateBy { it.qualifiedName!!.asString() }
+                .toMutableMap()
         schemaTypeInfoCache = mutableMapOf()
         val schemaIds = computeShemaIds()
 
@@ -552,7 +654,7 @@ class CborSymbolProcessor(
                             } else {
                                 hadMergedMap = true
                                 addSerializedMapValues(
-                                    this, "builder",
+                                    this, "builder.",
                                     source, type
                                 )
                             }
@@ -592,7 +694,7 @@ class CborSymbolProcessor(
                     if (findAnnotation(property, ANNOTATION_MERGE) != null) {
                         if (type.declaration.qualifiedName!!.asString() == "kotlin.collections.Map") {
                             line("val $name = mutableMapOf<${typeArguments(this, type)}>()")
-                            addDeserializedMapValues(this, name, dataItem, type, fieldNameSet)
+                            addDeserializedMapValues(this, "$name.", dataItem, type, fieldNameSet)
                         }
                     } else {
                         val item = "$dataItem[\"$fieldName\"]"
@@ -698,10 +800,15 @@ class CborSymbolProcessor(
             name.substring(superName.length)
         } else if (name.endsWith(superName)) {
             name.substring(0, name.length - superName.length)
+        } else if (subclass.parentDeclaration != null &&
+            (subclass.parentDeclaration === superclass
+                || subclass.parentDeclaration == superclass.parentDeclaration)) {
+            // subclass is scoped in superclass or they are scoped in some other class
+            name
         } else {
             if (warn) {
                 logger.warn(
-                    "Supertype name is not a prefix or suffix of subtype name, rename or specify typeId explicitly",
+                    "Supertype name is not a prefix or suffix of subtype name, rename or specify typeId explicitly: $name",
                     subclass
                 )
             }
@@ -753,11 +860,32 @@ class CborSymbolProcessor(
     }
 
     private fun computeShemaIds(): Map<KSClassDeclaration, ByteString> {
-        for ((qualifiedName, clazz) in compilationUnitClassMap.entries) {
-            if (!schemaTypeInfoCache.contains(qualifiedName)) {
-                getSchemaTypeInfoForDefinedClass(clazz, qualifiedName)
+
+        var retryCount = 0
+        while (true) {
+            val missedClasses = mutableMapOf<String, KSClassDeclaration>()
+            for ((qualifiedName, clazz) in compilationUnitClassMap.entries) {
+                if (!schemaTypeInfoCache.contains(qualifiedName)) {
+                    try {
+                        getSchemaTypeInfoForDefinedClass(clazz, qualifiedName)
+                    } catch (err: ForceAddSerializableClass) {
+                        val missedClass = err.declaration
+                        missedClasses[missedClass.qualifiedName!!.asString()] = missedClass
+                    }
+                }
             }
+            if (missedClasses.isEmpty()) {
+                break
+            }
+            compilationUnitClassMap.putAll(missedClasses)
+            schemaTypeInfoCache.clear()
+            if (++retryCount > 4) {
+                logger.error("Too many attempts to collect annotated classes")
+                break
+            }
+            logger.warn("Adding to annotated classes in this compilation unit ($retryCount): ${missedClasses.keys.joinToString(", ")}")
         }
+
         val graphHasher = GraphHasher {
             object: HashBuilder {
                 val digest = MessageDigest.getInstance("SHA3-256");
@@ -795,7 +923,7 @@ class CborSymbolProcessor(
             }
             if (typeInfo.specifiedHash != null && computedHash != typeInfo.specifiedHash) {
                 val encoded = computedHash.toBase64Url()
-                logger.error("Schema change detected, new schemaHash = \"${encoded}\"", declaration)
+                logger.error("Schema change detected for $className, new schemaHash = \"${encoded}\"", declaration)
             }
             schemaIds[declaration] = typeInfo.specifiedId ?: computedHash
         }
@@ -936,11 +1064,10 @@ class CborSymbolProcessor(
         val cborSchemaIdProperty = resolver.getKSNameFromString(qualifiedName + "_cborSchemaId")
         val prop = resolver.getPropertyDeclarationByName(cborSchemaIdProperty, true)
         if (prop == null) {
-            // This is not expected, if it is in this compilation unit, it should not
-            // be a leaf, and if it is from another compilation unit, XXX_cborSchemaId property
-            // should have been generated.
-            logger.error("$qualifiedName: compilation error, schemaId not found")
-            return null
+            // We should not ever get here, this seems to be a bug in KSP (and sometimes we hit
+            // this code). This is caused by resolver.getSymbolsWithAnnotation not returning some
+            // of the classes that are actually are annotated with ANNOTATION_SERIALIZABLE.
+            throw ForceAddSerializableClass(declaration)
         }
         return findAnnotation(prop, ANNOTATION_SERIALIZABLE_GENERATED)
     }
@@ -1013,7 +1140,7 @@ class CborSymbolProcessor(
             "kotlin.Float" -> simpleLeaf("Float")
             "kotlin.Double" -> simpleLeaf("Double")
             "kotlin.Boolean" -> simpleLeaf("Boolean")
-            "kotlinx.datetime.Instant" -> simpleLeaf("DateTimeString")
+            "kotlin.time.Instant" -> simpleLeaf("DateTimeString")
             "kotlinx.datetime.LocalDate" -> simpleLeaf("DateString")
             DATA_ITEM_CLASS -> simpleLeaf("Any")
             else -> {
@@ -1030,5 +1157,7 @@ class CborSymbolProcessor(
         val specifiedHash: ByteString?,
         val specifiedId: ByteString?
     )
+
+    class ForceAddSerializableClass(val declaration: KSClassDeclaration): Exception()
 }
 

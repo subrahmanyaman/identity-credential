@@ -18,7 +18,7 @@ import org.multipaz.asn1.OID
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.DataItem
 import org.multipaz.util.Logger
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.annotation.CborSerializationImplemented
 import kotlin.io.encoding.Base64
@@ -422,6 +422,17 @@ class X509Cert(
          */
         fun addExtension(oid: String, critical: Boolean, value: ByteArray): Builder {
             extensions.put(oid, Extension(critical, value))
+            return this
+        }
+
+        /**
+         * Adds an X.509 extension to the certificate.
+         *
+         * @param extension a [X509Extension] to add.
+         * @return the builder
+         */
+        fun addExtension(extension: X509Extension): Builder {
+            extensions.put(extension.oid, Extension(extension.isCritical, extension.data.toByteArray()))
             return this
         }
 

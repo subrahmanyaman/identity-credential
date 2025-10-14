@@ -30,6 +30,9 @@ The project provides libraries written in [Kotlin Multiplatform](https://kotlinl
   packaged separately from the core `multipaz` library because its size is
   non-negligible and not all applications need this or they may bring their
   own.
+- `multipaz-longfellow` bundles the [Google Longfellow-ZK](https://github.com/google/longfellow-zk) library
+  and integrates with the core `multipaz` for Zero-Knowledge Proofs
+  according to latest available [ISO/IEC 18013-5 Second Edition draft](https://github.com/ISOWG10/ISO-18013).
 
 ## Command-line tool
 
@@ -81,32 +84,62 @@ see the next section for an example of this.
 
 ## Examples / Samples
 
-For a fully-fledged mDL wallet or reader application, the current answer is to use
-the `samples/testapp` module which works on both Android and iOS. This application
-is intended for developers and as such has a lot of options and settings. It's
-intended to exercise all code in the libraries. Prebuilt APKs are available
-from https://apps.multipaz.org.
+For a fully-fledged mDL wallet, our current answer is to use the `samples/testapp`
+module which works on both Android and iOS. This application is intended for
+developers and as such has a lot of options and settings. It's intended to
+exercise all code in the libraries. Prebuilt APKs are available from
+https://apps.multipaz.org.
 
-To see how to use the Multipaz libraries from another project, see
+For a fully-featured proximity reader app using Multipaz, see
+[MpzIdentityReader](https://github.com/davidz25/MpzIdentityReader).
+Prebuilt APKs are available from https://apps.multipaz.org.
+
+For an over-the-Internet verifier supporting OpenID4VP (both W3C DC API and
+URI schemes) and ISO/IEC 18013-7 Annex C see https://verifier.multipaz.org
+which  is built from the `multipaz-verifier-server` module.
+
+To see how to use the Multipaz libraries in a 3rd party project, see
 [MpzSecureAreaSample](https://github.com/davidz25/MpzSecureAreaSample) for a
 minimal Compose Multiplatform app using the SecureArea abstraction and
 [MpzCmpWallet](https://github.com/davidz25/MpzCmpWallet) for a Compose Multiplatform app
-implementing a minimal ISO/IEC 18013-5:2021 wallet using QR and Bluetooth Low Energy.
-These applications work on both Android and iOS.
+implementing a minimal ISO/IEC 18013-5:2021 wallet supporting both
+proximity and over-the-Internet readers. These applications work on
+both Android and iOS.
 
 To see how to consume Multipaz in a Swift application see
 [MpzSwiftWallet](https://github.com/davidz25/MpzSwiftWallet). This is a minimal
-ISO/IEC 18013-5:2021 wallet using QR and Bluetooth Low Energy, using SwiftUI. This
-is using [Multipaz.xcframework](https://apps.multipaz.org/xcf) through the Swift
-Packager Manager.
+ISO/IEC 18013-5:2021 wallet using QR and Bluetooth Low Energy, using SwiftUI.
+This is using [Multipaz.xcframework](https://apps.multipaz.org/xcf)
+through the Swift Packager Manager.
 
 For a sample using the legacy library, see
 [SimpleVerifierStandalone](https://github.com/davidz25/SimpleVerifierStandalone)
 which is a simple Android mDL reader application.
 
-We intend to provide production-quality wallet and reader applications in separate
-repositories later in 2025. This will be based on what is currently in the `wallet`
-module, converted to Compose Multiplatform.
+## Developer Resources
+
+[developer.multipaz.org](developer.multipaz.org) is a comprehensive resource for developers. **The entire developer website is open source** and contributions are welcome!
+
+### Documentation
+
+- [Getting Started](https://developer.multipaz.org/docs/getting-started): Provides foundational knowledge for new users.
+- [API Reference](https://developer.multipaz.org/kdocs/index.html): Comprehensive documentation for every API endpoint, providing thorough understanding of the available functionalities.
+- [Codelabs](https://developer.multipaz.org/codelabs): Guided tutorials on key identity credential concepts, along with sample apps that provide tangible examples to accelerate development.
+- [Showcase Apps](https://developer.multipaz.org/showcase): Real-world applications built leveraging the Multipaz framework.
+
+### Applications
+
+- [Android Apps](https://apps.multipaz.org/)
+- [Web Verifier App](https://verifier.multipaz.org/)
+- [Issuer Portal](https://issuer.multipaz.org/)
+- [Identity Reader Backend](http://identityreader.multipaz.org/)
+
+### Community & Contribution
+
+- [Contributing Guide](https://developer.multipaz.org/contributing/contributing)
+- [Website Contribution Guide](https://github.com/openwallet-foundation/multipaz-developer-website)
+- [Blog](https://developer.multipaz.org/blog)
+- [Discord](https://discord.com/invite/openwalletfoundation)
 
 ## Note
 

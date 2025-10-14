@@ -15,6 +15,11 @@ val projectVersionName: String by rootProject.extra
 kotlin {
     jvmToolchain(17)
 
+    compilerOptions {
+        optIn.add("kotlin.time.ExperimentalTime")
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     jvm()
 
     androidTarget {
@@ -44,6 +49,11 @@ kotlin {
         }
     }
 
+    // we want some extra dependsOn calls to create
+    // javaSharedMain to share between JVM and Android,
+    // but otherwise want to follow default hierarchy.
+    applyDefaultHierarchyTemplate()
+
     sourceSets {
         val commonMain by getting {
             dependencies {
@@ -61,6 +71,8 @@ kotlin {
                 implementation(libs.accompanist.permissions)
                 implementation(libs.androidx.material)
                 implementation(libs.play.services.identity.credentials)
+                implementation(libs.androidx.credentials)
+                implementation(libs.androidx.credentials.play.services.auth)
             }
         }
 
@@ -68,7 +80,20 @@ kotlin {
             dependencies {
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.ktor.client.mock)
                 implementation(project(":multipaz-doctypes"))
+            }
+        }
+
+        val androidInstrumentedTest by getting {
+            dependsOn(commonTest)
+            dependencies {
+                implementation(project(":multipaz-models:matcherTest"))
+                implementation(libs.androidx.test.junit)
+                implementation(libs.androidx.espresso.core)
+                implementation(libs.kotlin.test)
+                implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.kotlinx.coroutines.android)
             }
         }
     }
@@ -128,4 +153,8 @@ publishing {
             }
         }
     }
+}
+
+subprojects {
+	apply(plugin = "org.jetbrains.dokka")
 }

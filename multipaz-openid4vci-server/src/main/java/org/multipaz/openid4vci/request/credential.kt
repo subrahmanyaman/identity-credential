@@ -17,7 +17,6 @@ import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -31,9 +30,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
-import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborMap
-import org.multipaz.cbor.putCborArray
 import org.multipaz.cbor.putCborMap
 import org.multipaz.cbor.toDataItemFullDate
 import org.multipaz.crypto.EcPublicKey
@@ -41,15 +38,15 @@ import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.openid4vci.credential.Openid4VciFormat
 import org.multipaz.openid4vci.util.DPoPNonceException
 import org.multipaz.openid4vci.util.IssuanceState
-import org.multipaz.openid4vci.util.JwtCheck
 import org.multipaz.openid4vci.util.OpaqueIdType
 import org.multipaz.openid4vci.util.authorizeWithDpop
 import org.multipaz.openid4vci.util.codeToId
 import org.multipaz.openid4vci.util.extractAccessToken
 import org.multipaz.openid4vci.util.getSystemOfRecordUrl
-import org.multipaz.openid4vci.util.validateJwt
 import org.multipaz.server.getBaseUrl
+import org.multipaz.jwt.JwtCheck
 import org.multipaz.util.Logger
+import org.multipaz.jwt.validateJwt
 import kotlin.random.Random
 
 /**
@@ -63,7 +60,7 @@ suspend fun credential(call: ApplicationCall) {
         authorizeWithDpop(
             call.request,
             state.dpopKey!!,
-            state.clientId,
+            state.clientId!!,
             state.dpopNonce,
             accessToken
         )
@@ -78,10 +75,12 @@ suspend fun credential(call: ApplicationCall) {
     }
     state.dpopNonce = null
     IssuanceState.updateIssuanceState(id, state)
+    val byOfferId = CredentialFactory.getRegisteredFactories().byOfferId
+
     val requestString = call.receiveText()
     val json = Json.parseToJsonElement(requestString) as JsonObject
     val format = Openid4VciFormat.fromJson(json)
-    val factory = CredentialFactory.byOfferId.values.find { factory ->
+    val factory = byOfferId.values.find { factory ->
         (format == null || factory.format == format) && factory.scope == state.scope
     }
     if (factory == null) {
@@ -136,15 +135,31 @@ suspend fun credential(call: ApplicationCall) {
     val authenticationKeys = when (proofType) {
         "attestation" -> {
             proofs.flatMap { proof ->
-                val body = validateJwt(
-                    jwt = proof.jsonPrimitive.content,
-                    jwtName = "Key attestation",
-                    publicKey = null,
-                    checks = mapOf(
-                        JwtCheck.TYP to "keyattestation+jwt",
-                        JwtCheck.TRUST to "key_attestation"
+                val body = try {
+                    // TODO: old 'typ' value (draft 15), remove once clients are up to date
+                    validateJwt(
+                        jwt = proof.jsonPrimitive.content,
+                        jwtName = "Key attestation",
+                        publicKey = null,
+                        checks = mapOf(
+                            JwtCheck.TYP to "keyattestation+jwt",
+                            JwtCheck.TRUST to "trusted_key_attestations"
+                        )
+                    ).also {
+                        Logger.w(TAG, "Outdated value for key attestation 'typ', please update")
+                    }
+                } catch (err: InvalidRequestException) {
+                    // New clients that use up-to-date 'typ' value will get here
+                    validateJwt(
+                        jwt = proof.jsonPrimitive.content,
+                        jwtName = "Key attestation",
+                        publicKey = null,
+                        checks = mapOf(
+                            JwtCheck.TYP to "key-attestation+jwt",
+                            JwtCheck.TRUST to "trusted_key_attestations"
+                        )
                     )
-                )
+                }
                 validateAndConsumeCredentialChallenge(body["nonce"]!!.jsonPrimitive.content)
                 body["attested_keys"]!!.jsonArray.map { key ->
                     EcPublicKey.fromJwk(key.jsonObject)

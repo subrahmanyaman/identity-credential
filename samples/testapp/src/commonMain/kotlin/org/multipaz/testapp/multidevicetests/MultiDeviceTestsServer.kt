@@ -4,7 +4,6 @@ import androidx.compose.runtime.MutableState
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
-import org.multipaz.mdoc.engagement.EngagementGenerator
 import org.multipaz.mdoc.sessionencryption.SessionEncryption
 import org.multipaz.mdoc.transport.MdocTransportFactory
 import org.multipaz.mdoc.transport.MdocTransportOptions
@@ -20,6 +19,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import org.multipaz.cbor.Cbor
+import org.multipaz.mdoc.engagement.buildDeviceEngagement
 import org.multipaz.mdoc.role.MdocRole
 import kotlin.math.sqrt
 import kotlin.time.Duration.Companion.seconds
@@ -128,7 +129,10 @@ class MultiDeviceTestsServer(
                 true
             }
         }
-        val options = MdocTransportOptions(bleUseL2CAP = bleUseL2CAP)
+        val options = MdocTransportOptions(
+            bleUseL2CAP = bleUseL2CAP,
+            bleUseL2CAPInEngagement = bleUseL2CAP
+        )
 
         var holderSuccess = false
         var readerSuccess = false
@@ -148,12 +152,9 @@ class MultiDeviceTestsServer(
                 transport.advertise()
             }
             val eDeviceKey = Crypto.createEcPrivateKey(EcCurve.P256)
-            val engagementGenerator = EngagementGenerator(
-                eSenderKey = eDeviceKey.publicKey,
-                version = "1.0"
-            )
-            engagementGenerator.addConnectionMethods(listOf(transport.connectionMethod))
-            val encodedDeviceEngagement = engagementGenerator.generate()
+            val encodedDeviceEngagement = Cbor.encode(buildDeviceEngagement(eDeviceKey = eDeviceKey.publicKey) {
+                addConnectionMethod(transport.connectionMethod)
+            }.toDataItem())
             val getPsmFromReader = (test == Test.MDOC_CENTRAL_CLIENT_MODE_L2CAP_PSM_IN_TWO_WAY_ENGAGEMENT)
             sendChannel.writeStringUtf8("TestPresentationPrepare ${iterationNumber} ${numIterationsTotal} " +
                     "${test.name} ${plan.prewarm} ${bleUseL2CAP} ${getPsmFromReader} " +
@@ -188,7 +189,7 @@ class MultiDeviceTestsServer(
                 val sessionEncryption = SessionEncryption(
                     role = MdocRole.MDOC,
                     eSelfKey = eDeviceKey,
-                    remotePublicKey = eReaderKey,
+                    remotePublicKey = eReaderKey.publicKey,
                     encodedSessionTranscript = encodedSessionTranscript
                 )
                 val (deviceRequest, statusCode) = sessionEncryption.decryptMessage(sessionEstablishmentMessage)

@@ -10,20 +10,15 @@ import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
 import org.multipaz.cose.CoseNumberLabel
 import org.multipaz.crypto.Algorithm
-import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.X509Cert
-import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.DrivingLicense
-import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Resources
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
 import org.multipaz.util.toBase64Url
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.DateTimeUnit
-import kotlinx.datetime.Instant
-import kotlinx.datetime.LocalDate
+import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.plus
@@ -43,7 +38,7 @@ import kotlin.time.Duration.Companion.days
 /**
  * Factory for Driver's License credentials.
  */
-internal class CredentialFactoryMdl : CredentialFactory {
+internal class CredentialFactoryMdl : CredentialFactoryBase() {
     override val offerId: String
         get() = "mDL"
 
@@ -59,9 +54,6 @@ internal class CredentialFactoryMdl : CredentialFactory {
     override val cryptographicBindingMethods: List<String>
         get() = listOf("cose_key")
 
-    override val credentialSigningAlgorithms: List<String>
-        get() = CredentialFactory.DEFAULT_CREDENTIAL_SIGNING_ALGORITHMS
-
     override val name: String
         get() = "Example Driver License (mDL)"
 
@@ -74,16 +66,14 @@ internal class CredentialFactoryMdl : CredentialFactory {
     ): String {
         val now = Clock.System.now()
 
-        val resources = BackendEnvironment.getInterface(Resources::class)!!
-
         val coreData = data["core"]
         val dateOfBirth = coreData["birth_date"].asDateString
-        val portrait = if (coreData.hasKey("portrait")) {
-            coreData["portrait"].asBstr
+        val address = if (coreData.hasKey("address")) {
+            val addressObject = coreData["address"]
+            if (addressObject.hasKey("formatted")) addressObject["formatted"] else null
         } else {
-            resources.getRawResource("female.jpg")!!.toByteArray()
+            null
         }
-
         val records = data["records"]
         if (!records.hasKey("mDL")) {
             throw IllegalArgumentException("No driver's license was issued to this person")
@@ -97,6 +87,8 @@ internal class CredentialFactoryMdl : CredentialFactory {
         val timeSigned = Instant.fromEpochSeconds(now.epochSeconds, 0)
         val validFrom = Instant.fromEpochSeconds(now.epochSeconds, 0)
         val validUntil = validFrom + 30.days
+
+        val resources = BackendEnvironment.getInterface(Resources::class)!!
 
         // Generate an MSO and issuer-signed data for this authentication key.
         val docType = DrivingLicense.MDL_DOCTYPE
@@ -120,20 +112,48 @@ internal class CredentialFactoryMdl : CredentialFactory {
 
         val issuerNamespaces = buildIssuerNamespaces {
             addNamespace(DrivingLicense.MDL_NAMESPACE) {
-                // Transfer core fields
-                addDataElement("family_name", coreData["family_name"])
-                addDataElement("given_name", coreData["given_name"])
-                addDataElement("portrait", Bstr(portrait))
+                val added = mutableSetOf("birth_date")
                 addDataElement("birth_date", dateOfBirth.toDataItemFullDate())
-                val added = mutableSetOf("family_name", "given_name", "portrait", "birth_date")
 
                 // Transfer fields from mDL record that have counterparts in the mDL credential
                 for ((nameItem, value) in mdlData.asMap) {
                     val name = nameItem.asTstr
-                    if (mdocType.dataElements.contains(name)) {
+                    if (!added.contains(name) && mdocType.dataElements.contains(name)) {
                         addDataElement(name, value)
                         added.add(name)
                     }
+                }
+
+                if (coreData.hasKey("given_name_unicode") && !added.contains("given_name_national_character")) {
+                    addDataElement("given_name_national_character", coreData["given_name_unicode"])
+                    added.add("given_name_national_character")
+                }
+
+                if (coreData.hasKey("family_name_unicode") && !added.contains("family_name_national_character")) {
+                    addDataElement("family_name_national_character", coreData["family_name_unicode"])
+                    added.add("family_name_national_character")
+                }
+
+                if (address != null) {
+                    addDataElement("resident_address", address)
+                    added.add("resident_address")
+                }
+
+                // Transfer core fields that have counterparts in the mDL credential
+                for ((nameItem, value) in coreData.asMap) {
+                    val name = nameItem.asTstr
+                    if (!added.contains(name) && mdocType.dataElements.contains(name)) {
+                        addDataElement(name, value)
+                        added.add(name)
+                    }
+                }
+
+                if (!added.contains("portrait")) {
+                    addDataElement(
+                        dataElementName = "portrait",
+                        value = Bstr(resources.getRawResource("female.jpg")!!.toByteArray())
+                    )
+                    added.add("portrait")
                 }
 
                 // Values derived from the birth_date
@@ -143,25 +163,7 @@ internal class CredentialFactoryMdl : CredentialFactory {
                 addDataElement("age_over_18", if (ageOver18) Simple.TRUE else Simple.FALSE)
                 addDataElement( "age_over_21", if (ageOver21) Simple.TRUE else Simple.FALSE)
 
-                addDataElement(
-                    "driving_privileges",
-                    buildCborArray {
-                        addCborMap {
-                            put("vehicle_category_code", "A")
-                            put("issue_date", Tagged(1004, Tstr("2018-08-09")))
-                            put("expiry_date", Tagged(1004, Tstr("2028-09-01")))
-                        }
-                        addCborMap {
-                            put("vehicle_category_code", "B")
-                            put("issue_date", Tagged(1004, Tstr("2017-02-23")))
-                            put("expiry_date", Tagged(1004, Tstr("2028-09-01")))
-                        }
-                    }
-                )
-                added.add("driving_privileges")
-
-                // Add all mandatory elements for completeness. This will come from the System of
-                // Record in the future
+                // Add all mandatory elements for completeness if they are missing.
                 for ((elementName, data) in mdocType.dataElements) {
                     if (!data.mandatory || added.contains(elementName)) {
                         continue
@@ -177,13 +179,6 @@ internal class CredentialFactoryMdl : CredentialFactory {
         }
 
         msoGenerator.addValueDigests(issuerNamespaces)
-
-        val documentSigningKeyCert = X509Cert.fromPem(
-            resources.getStringResource("ds_certificate.pem")!!)
-        val documentSigningKey = EcPrivateKey.fromPem(
-            resources.getStringResource("ds_private_key.pem")!!,
-            documentSigningKeyCert.ecPublicKey
-        )
 
         val mso = msoGenerator.generate()
         val taggedEncodedMso = Cbor.encode(Tagged(24, Bstr(mso)))
@@ -201,15 +196,15 @@ internal class CredentialFactoryMdl : CredentialFactory {
         val unprotectedHeaders = mapOf<CoseLabel, DataItem>(
             Pair(
                 CoseNumberLabel(Cose.COSE_LABEL_X5CHAIN),
-                X509CertChain(listOf(documentSigningKeyCert)).toDataItem()
+                signingCertificateChain.toDataItem()
             )
         )
         val encodedIssuerAuth = Cbor.encode(
             Cose.coseSign1Sign(
-                documentSigningKey,
+                signingKey,
                 taggedEncodedMso,
                 true,
-                documentSigningKey.publicKey.curve.defaultSigningAlgorithm,
+                signingKey.publicKey.curve.defaultSigningAlgorithm,
                 protectedHeaders,
                 unprotectedHeaders
             ).toDataItem()

@@ -7,14 +7,12 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.readBytes
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.yield
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -143,10 +141,10 @@ object AppLinksCheck {
             Logger.e(TAG, "There are two ways to fix this issue. If you are a member of Multipaz")
             Logger.e(TAG, "team, you should create a PR adding your app signing key digest:")
             Logger.e(TAG, digestToString(digests.first()))
-            Logger.e(TAG, "as a separate line to this file:")
+            Logger.e(TAG, "in the list of app_signature_certificate_digests in this file:")
             Logger.e(
                 TAG,
-                "multipaz-backend-server/src/main/resources/resources/android_trusted_app_signatures.txt"
+                "multipaz-backend-server/src/main/resources/resources/default_configuration.txt"
             )
             Logger.e(TAG, "The other way is to use your own HTTPS server. Replace apps.multipaz.org")
             Logger.e(TAG, "where it is referenced in the code with your server URL (in particular")

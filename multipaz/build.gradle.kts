@@ -17,6 +17,11 @@ val projectVersionName: String by rootProject.extra
 kotlin {
     jvmToolchain(17)
 
+    compilerOptions {
+        optIn.add("kotlin.time.ExperimentalTime")
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     jvm()
 
     androidTarget {
@@ -96,6 +101,7 @@ kotlin {
                 implementation(libs.bouncy.castle.bcpkix)
                 implementation(libs.kotlin.test)
                 implementation(libs.kotlinx.coroutines.test)
+                implementation(project(":multipaz-doctypes"))
             }
         }
 
@@ -244,4 +250,8 @@ publishing {
             }
         }
     }
+}
+
+subprojects {
+	apply(plugin = "org.jetbrains.dokka")
 }

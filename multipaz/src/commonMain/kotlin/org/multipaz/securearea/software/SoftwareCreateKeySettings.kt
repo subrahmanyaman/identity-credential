@@ -4,7 +4,7 @@ import org.multipaz.crypto.Algorithm
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.PassphraseConstraints
 import org.multipaz.securearea.config.SecureAreaConfigurationSoftware
-import kotlinx.datetime.Instant;
+import kotlin.time.Instant;
 import kotlinx.io.bytestring.buildByteString
 
 /**
@@ -16,11 +16,13 @@ class SoftwareCreateKeySettings internal constructor(
     val passphraseConstraints: PassphraseConstraints?,
     algorithm: Algorithm,
     val subject: String?,
-    val validFrom: Instant?,
-    val validUntil: Instant?
+    validFrom: Instant?,
+    validUntil: Instant?
 ) : CreateKeySettings(
-    algorithm,
-    buildByteString {}
+    algorithm = algorithm,
+    nonce = buildByteString {},
+    validFrom = validFrom,
+    validUntil = validUntil
 ) {
     /**
      * A builder for [SoftwareCreateKeySettings].

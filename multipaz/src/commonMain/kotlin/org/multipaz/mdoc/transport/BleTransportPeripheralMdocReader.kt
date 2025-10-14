@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethod
 import org.multipaz.mdoc.connectionmethod.MdocConnectionMethodBle
@@ -39,7 +39,12 @@ internal class BleTransportPeripheralMdocReader(
     override val state: StateFlow<State> = _state.asStateFlow()
 
     override val connectionMethod: MdocConnectionMethod
-        get() = MdocConnectionMethodBle(true, false, uuid, null)
+        get() = MdocConnectionMethodBle(
+            supportsPeripheralServerMode = true,
+            supportsCentralClientMode = false,
+            peripheralServerModeUuid = uuid,
+            centralClientModeUuid = null
+        )
 
     init {
         centralManager.setUuids(

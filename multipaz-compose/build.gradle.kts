@@ -19,6 +19,11 @@ val projectVersionName: String by rootProject.extra
 kotlin {
     jvmToolchain(17)
 
+    compilerOptions {
+        optIn.add("kotlin.time.ExperimentalTime")
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     androidTarget {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         instrumentedTestVariant.sourceSetTree.set(KotlinSourceSetTree.test)
@@ -57,7 +62,6 @@ kotlin {
                 implementation(compose.material3)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
-                implementation(compose.components.uiToolingPreview)
                 implementation(compose.materialIconsExtended)
                 implementation(libs.jetbrains.navigation.compose)
                 implementation(libs.jetbrains.navigation.runtime)
@@ -66,7 +70,6 @@ kotlin {
                 api(compose.material3)
                 api(compose.ui)
                 api(compose.components.resources)
-                api(compose.components.uiToolingPreview)
                 api(compose.materialIconsExtended)
                 api(libs.jetbrains.navigation.compose)
                 api(libs.jetbrains.navigation.runtime)
@@ -76,6 +79,8 @@ kotlin {
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.kotlinx.io.core)
+                implementation(libs.coil.core)
+                implementation(libs.coil.compose.core)
             }
         }
         val commonTest by getting {
@@ -136,6 +141,10 @@ android {
             withSourcesJar()
         }
     }
+
+    lint {
+        baseline = file("lint-baseline.xml")
+    }
 }
 
 group = "org.multipaz"
@@ -160,3 +169,7 @@ publishing {
 }
 
 tasks.named("generateResourceAccessorsForAndroidMain").configure { dependsOn("sourceReleaseJar") }
+
+subprojects {
+	apply(plugin = "org.jetbrains.dokka")
+}

@@ -1,17 +1,15 @@
 package org.multipaz.models.openid
 
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.encodeToByteString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
-import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -38,18 +36,17 @@ import org.multipaz.mdoc.issuersigned.IssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObjectParser
 import org.multipaz.mdoc.response.DeviceResponseGenerator
 import org.multipaz.mdoc.response.DocumentGenerator
-import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.mdoc.zkp.ZkSystem
 import org.multipaz.mdoc.zkp.ZkSystemSpec
+import org.multipaz.models.openid.dcql.DcqlQuery
+import org.multipaz.models.openid.dcql.DcqlResponseCredentialSetOptionMemberMatch
 import org.multipaz.models.presentment.PresentmentCanceled
 import org.multipaz.models.presentment.PresentmentSource
 import org.multipaz.models.presentment.findTrustPoint
-import org.multipaz.models.presentment.getDocumentsMatchingRequest
-import org.multipaz.request.JsonRequest
+import org.multipaz.presentment.CredentialPresentmentData
+import org.multipaz.presentment.CredentialPresentmentSelection
 import org.multipaz.request.JsonRequestedClaim
-import org.multipaz.request.MdocRequest
 import org.multipaz.request.MdocRequestedClaim
-import org.multipaz.request.Request
 import org.multipaz.request.Requester
 import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.SdJwtVcCredential
@@ -58,7 +55,6 @@ import org.multipaz.trustmanagement.TrustPoint
 import org.multipaz.util.Constants
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
-import org.multipaz.util.fromHex
 import org.multipaz.util.toBase64Url
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.random.Random
@@ -77,11 +73,11 @@ object OpenID4VP {
     }
 
     /**
-     * Generates an OpenID4VP 1.0 request.
+     * Generates an OpenID4VP request.
      *
      * @param version the version of OpenID4vp to generate the request for.
-     * @param origin the origin, e.g. `https://verifier.multipaz.org`.
-     * @param clientId the client ID, e.g. `x509_san_dns:verifier.multipaz.org`.
+     * @param origin the origin, e.g. `https://verifier.multipaz.org` or `android:apk-key-hash:<sha256_hash-of-apk-signing-cert>`.
+     * @param clientId the client ID, e.g. `x509_san_dns:verifier.multipaz.org` or `null`.
      * @param nonce the nonce to use.
      * @param responseEncryptionKey the key to encrypt the response against or `null`.
      * @param requestSigningKey the key to sign the request with or `null`.
@@ -94,14 +90,14 @@ object OpenID4VP {
     fun generateRequest(
         version: Version,
         origin: String,
-        clientId: String,
+        clientId: String?,
         nonce: String,
         responseEncryptionKey: EcPublicKey?,
         requestSigningKey: EcPrivateKey?,
         requestSigningKeyCertification: X509CertChain?,
         responseMode: ResponseMode,
         responseUri: String?,
-        dclqQuery: JsonObject
+        dclqQuery: JsonObject,
     ): JsonObject {
         if (version == Version.DRAFT_24) {
             return generateRequestDraft24(
@@ -126,6 +122,7 @@ object OpenID4VP {
             )
             responseUri?.let { put("response_uri", it)}
             if (requestSigningKey != null) {
+                require(clientId != null) { "clientId must be set for signed requests"}
                 put("client_id", clientId)
                 putJsonArray("expected_origins") {
                     add(origin)
@@ -184,8 +181,8 @@ object OpenID4VP {
     }
 
     private fun generateRequestDraft24(
-        origin: String,
-        clientId: String,
+        origin: String?,
+        clientId: String?,
         nonce: String,
         responseEncryptionKey: EcPublicKey?,
         requestSigningKey: EcPrivateKey?,
@@ -204,9 +201,12 @@ object OpenID4VP {
             )
             responseUri?.let { put("response_uri", it)}
             if (requestSigningKey != null) {
+                require(clientId != null) { "clientId must be set for signed requests"}
                 put("client_id", clientId)
-                putJsonArray("expected_origins") {
-                    add(origin)
+                if (origin != null) {
+                    putJsonArray("expected_origins") {
+                        add(origin)
+                    }
                 }
             }
             put("dcql_query", dclqQuery)
@@ -263,13 +263,14 @@ object OpenID4VP {
      * Generates an OpenID4VP response.
      *
      * @param version the version of OpenID4VP to generate a response for.
-     * @param document the document chosen by the user or `null` if not using the W3C DC API.
+     * @param preselectedDocuments the list of documents the user may have preselected earlier (for
+     *   example an OS-provided credential picker like Android's Credential Manager) or the empty list
+     *   if the user didn't preselect.
      * @param source an object for application to provide data and policy.
-     * @param showDocumentPicker a function which will ask the user to select a document, only
-     *   used if [document] is `null`.
-     * @param showConsentPrompt a function to show a consent-prompt to the user.
-     * @param origin the origin of the requester or `null` if not known. This must be set if
-     *   using the W3C Digital Credentials API.
+     * @param showConsentPrompt a function to ask the user for consent.
+     * @property appId if this is a request from a local application, this contains the app identifier
+     *   for example `com.example.app` on Android or `<teamId>.<bundleId>` on iOS.
+     * @param origin the origin of the requester or `null` if not known.
      * @param request the authorization request object according to OpenID4VP Section 5 Authorization
      *   Request.
      * @param requesterCertChain the X.509 certificate chain if the request is signed or `null`
@@ -279,16 +280,15 @@ object OpenID4VP {
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun generateResponse(
         version: Version,
-        document: Document?,
+        preselectedDocuments: List<Document>,
         source: PresentmentSource,
-        showDocumentPicker: (suspend (
-            documents: List<Document>,
-        ) -> Document?)?,
         showConsentPrompt: suspend (
-            document: Document,
-            request: Request,
+            credentialPresentmentData: CredentialPresentmentData,
+            preselectedDocuments: List<Document>,
+            requester: Requester,
             trustPoint: TrustPoint?
-        ) -> Boolean,
+        ) -> CredentialPresentmentSelection?,
+        appId: String?,
         origin: String?,
         request: JsonObject,
         requesterCertChain: X509CertChain?,
@@ -338,13 +338,6 @@ object OpenID4VP {
             }
             syntheticOrigin
         }
-
-        // TODO: this is a simple minimal non-conforming implementation of DCQL. Will be ported soon to use our new
-        //   DCQL library, see https://github.com/openwallet-foundation-labs/identity-credential/tree/dcql-library
-        val dcqlQuery = request["dcql_query"]!!.jsonObject
-        val credentials = dcqlQuery["credentials"]!!.jsonArray
-        val credential = credentials[0].jsonObject
-        val dcqlId = credential["id"]!!.jsonPrimitive.content
 
         // Get public key to encrypt response against...
         var reEncAlg: Algorithm = Algorithm.UNSET
@@ -405,52 +398,76 @@ object OpenID4VP {
             else -> throw IllegalStateException("Unexpected response_mode $responseModeText")
         }
 
-        val format = credential["format"]!!.jsonPrimitive.content
-        val requestIsForZk = (format == "mso_mdoc_zk")
-        val response = if (format == "mso_mdoc" || format == "mso_mdoc_zk") {
-            openID4VPMsoMdoc(
-                version = version,
-                credential = credential,
-                source = source,
-                document = document,
-                showDocumentPicker = showDocumentPicker,
-                showConsentPrompt = showConsentPrompt,
-                origin = origin,
-                clientId = clientId,
-                nonce = nonce,
-                requesterCertChain = requesterCertChain,
-                reReaderPublicKey = reReaderPublicKey,
-                reEncAlg = reEncAlg,
-                responseUri = responseUri,
-                requestIsForZk = requestIsForZk
-            )
-        } else if (format == "dc+sd-jwt") {
-            openID4VPSdJwt(
-                version = version,
-                credential = credential,
-                source = source,
-                document = document,
-                showDocumentPicker = showDocumentPicker,
-                showConsentPrompt = showConsentPrompt,
-                origin = origin,
-                clientId = clientId,
-                nonce = nonce,
-                requesterCertChain = requesterCertChain,
-                reReaderPublicKey = reReaderPublicKey,
-                reEncAlg = reEncAlg,
-                responseMode = responseMode
-            )
+        val vpTokens = mutableMapOf<String, String>()
+        val dcqlQuery = DcqlQuery.fromJson(request["dcql_query"]!!.jsonObject)
+        val dcqlResponse = dcqlQuery.execute(
+            presentmentSource = source,
+        )
+
+        val requester = Requester(
+            certChain = requesterCertChain,
+            appId = appId,
+            origin = origin
+        )
+        val trustPoint = source.findTrustPoint(requester)
+
+        val selection = if (source.skipConsentPrompt) {
+            dcqlResponse.select(preselectedDocuments)
         } else {
-            throw IllegalArgumentException("Unsupported format $format")
+            showConsentPrompt(
+                dcqlResponse,
+                preselectedDocuments,
+                requester,
+                trustPoint
+            )
+        }
+        if (selection == null) {
+            throw PresentmentCanceled("User canceled at document selection time")
+        }
+
+        var usingZk = false
+        selection.matches.forEach { match ->
+            match as DcqlResponseCredentialSetOptionMemberMatch
+            val requestIsForZk = match.credentialQuery.format == "mso_mdoc_zk"
+            if (requestIsForZk) {
+                usingZk = true
+            }
+            val credentialResponse = if (match.credentialQuery.mdocDocType != null) {
+                openID4VPMsoMdoc(
+                    version = version,
+                    match = match,
+                    source = source,
+                    origin = origin,
+                    clientId = clientId,
+                    nonce = nonce,
+                    reReaderPublicKey = reReaderPublicKey,
+                    responseUri = responseUri,
+                    requestIsForZk = requestIsForZk
+                )
+            } else if (match.credentialQuery.vctValues != null) {
+                openID4VPSdJwt(
+                    version = version,
+                    match = match,
+                    origin = origin,
+                    clientId = clientId,
+                    nonce = nonce,
+                    responseMode = responseMode
+                )
+            } else {
+                throw IllegalArgumentException("Expected ISO mdoc or IETF SD-JWT, got neither")
+            }
+            vpTokens.put(match.credentialQuery.id, credentialResponse)
         }
 
         val vpToken = when (version) {
             Version.DRAFT_29 -> {
                 buildJsonObject {
                     putJsonObject("vp_token") {
-                        // TODO: For now we only support returning a single Verifiable Presentation per requested credential,
-                        putJsonArray(dcqlId) {
-                            add(response)
+                        for ((dcqlId, response) in vpTokens) {
+                            putJsonArray(dcqlId) {
+                                // For now we only support returning a single Verifiable Presentation per requested credential,
+                                add(response)
+                            }
                         }
                     }
                 }
@@ -459,7 +476,9 @@ object OpenID4VP {
             Version.DRAFT_24 -> {
                 buildJsonObject {
                     putJsonObject("vp_token") {
-                        put(dcqlId, response)
+                        for ((dcqlId, response) in vpTokens) {
+                            put(dcqlId, response)
+                        }
                     }
                 }
             }
@@ -467,7 +486,7 @@ object OpenID4VP {
         Logger.iJson(TAG, "vpToken", vpToken)
 
         // If using ZKP the response will be huge so compression helps
-        val compressionLevel = if (requestIsForZk) 9 else null
+        val compressionLevel = if (usingZk) 9 else null
 
         val walletGeneratedNonce = Random.nextBytes(16).toBase64Url()
         return if (reReaderPublicKey != null) {
@@ -491,60 +510,20 @@ object OpenID4VP {
 
     private suspend fun openID4VPMsoMdoc(
         version: Version,
-        credential: JsonObject,
+        match: DcqlResponseCredentialSetOptionMemberMatch,
         source: PresentmentSource,
-        document: Document?,
-        showDocumentPicker: (suspend (
-            documents: List<Document>,
-        ) -> Document?)?,
-        showConsentPrompt: suspend (
-            document: Document,
-            request: Request,
-            trustPoint: TrustPoint?
-        ) -> Boolean,
         origin: String?,
         clientId: String,
         nonce: String,
-        requesterCertChain: X509CertChain?,
         reReaderPublicKey: EcPublicKey?,
-        reEncAlg: Algorithm,
         responseUri: String?,
         requestIsForZk: Boolean
     ): String {
-        val meta = credential["meta"]!!.jsonObject
-        val docType = meta["doctype_value"]!!.jsonPrimitive.content
-
-        val requestedData = mutableMapOf<String, MutableList<Pair<String, Boolean>>>()
-        val claims = credential["claims"]!!.jsonArray
-        for (n in 0 until claims.size) {
-            val claim = claims[n].jsonObject
-            val path = claim["path"]!!.jsonArray
-            val namespace = path.get(0).jsonPrimitive.content
-            val name = path.get(1).jsonPrimitive.content
-            val intentToRetain = claim["intent_to_retain"]?.jsonPrimitive?.boolean ?: false
-            requestedData.getOrPut(namespace) { mutableListOf() }
-                .add(Pair(name, intentToRetain))
-        }
-
-        val requestBeforeFiltering = MdocRequest(
-            requester = Requester(
-                certChain = requesterCertChain,
-                websiteOrigin = origin
-            ),
-            requestedClaims = MdocUtil.generateRequestedClaims(
-                docType = docType,
-                requestedData = requestedData,
-                documentTypeRepository = source.documentTypeRepository,
-                mdocCredential = null
-            ),
-            docType = docType
-        )
-
         var zkSystemMatch: ZkSystem? = null
         var zkSystemSpec: ZkSystemSpec? = null
         if (requestIsForZk) {
             val requesterSupportedZkSpecs = mutableListOf<ZkSystemSpec>()
-            for (entry in meta["zk_system_type"]!!.jsonArray) {
+            for (entry in match.credentialQuery.meta["zk_system_type"]!!.jsonArray) {
                 entry as JsonObject
                 val system = entry["system"]!!.jsonPrimitive.content
                 val id = entry["id"]!!.jsonPrimitive.content
@@ -567,8 +546,8 @@ object OpenID4VP {
                     }
 
                     val matchingZkSystemSpec = zkSystem.getMatchingSystemSpec(
-                        requesterSupportedZkSpecs,
-                        requestBeforeFiltering
+                        zkSystemSpecs = requesterSupportedZkSpecs,
+                        requestedClaims = match.credentialQuery.claims
                     )
                     if (matchingZkSystemSpec != null) {
                         zkSystemMatch = zkSystem
@@ -581,40 +560,6 @@ object OpenID4VP {
             if (zkSystemMatch == null) {
                 throw IllegalStateException("Request is for ZK but no matching ZK system was found")
             }
-        }
-
-        val documentToUse = if (document != null) {
-            document
-        } else {
-            val documents = source.getDocumentsMatchingRequest(
-                request = requestBeforeFiltering,
-            )
-            if (documents.isNotEmpty()) {
-                if (documents.size == 1) {
-                    documents.first()
-                } else {
-                    if (showDocumentPicker != null) {
-                        val selected = showDocumentPicker(documents)
-                        if (selected == null) {
-                            throw PresentmentCanceled("User canceled at document selection time")
-                        }
-                        selected
-                    } else {
-                        documents.first()
-                    }
-                }
-            } else {
-                null
-            }
-        }
-        val mdocCredential = source.selectCredential(
-            document = documentToUse,
-            request = requestBeforeFiltering,
-            keyAgreementPossible = emptyList()
-        ) as MdocCredential?
-        if (mdocCredential == null) {
-            // TODO: possible dedicated exception
-            throw IllegalStateException("No credential found for docType ${docType}")
         }
 
         val handoverInfo = Cbor.encode(
@@ -651,12 +596,17 @@ object OpenID4VP {
         )
         Logger.iCbor(TAG, "handoverInfo", handoverInfo)
 
+        val handoverString = if (responseUri != null) {
+            "OpenID4VPHandover"
+        } else {
+            "OpenID4VPDCAPIHandover"
+        }
         val encodedSessionTranscript = Cbor.encode(
             buildCborArray {
                 add(Simple.NULL) // DeviceEngagementBytes
                 add(Simple.NULL) // EReaderKeyBytes
                 addCborArray {
-                    add("OpenID4VPDCAPIHandover")
+                    add(handoverString)
                     add(Crypto.digest(Algorithm.SHA256, handoverInfo))
                 }
             }
@@ -664,27 +614,11 @@ object OpenID4VP {
         Logger.iCbor(TAG, "handoverInfo", handoverInfo)
         Logger.iCbor(TAG, "encodedSessionTranscript", encodedSessionTranscript)
 
-        val request = MdocRequest(
-            requester = Requester(
-                certChain = requesterCertChain,
-                websiteOrigin = origin
-            ),
-            requestedClaims = MdocUtil.generateRequestedClaims(
-                docType = docType,
-                requestedData = requestedData,
-                documentTypeRepository = source.documentTypeRepository,
-                mdocCredential = mdocCredential
-            ),
-            docType = docType
-        )
-        val trustPoint = source.findTrustPoint(request)
-        if (!showConsentPrompt(mdocCredential.document, request, trustPoint)) {
-            throw PresentmentCanceled("The user did not consent")
-        }
-
+        val mdocCredential = match.credential as MdocCredential
+        val claims = match.credentialQuery.claims as List<MdocRequestedClaim>
         val documentBytes = calcDocument(
             credential = mdocCredential,
-            requestedClaims = request.requestedClaims,
+            requestedClaims = claims,
             encodedSessionTranscript = encodedSessionTranscript,
         )
 
@@ -735,11 +669,17 @@ object OpenID4VP {
                 "Signing is required for W3C DC API but its algorithm ${keyInfo.algorithm.name} is not for signing"
             )
         } else {
+            val authMessage = credential.document.metadata.displayName?.let {
+                "Authentication is required to share $it"
+            } ?: "Authentication is required to share the document"
             documentGenerator.setDeviceNamespacesSignature(
                 dataElements = NameSpacedData.Builder().build(),
                 secureArea = credential.secureArea,
                 keyAlias = credential.alias,
-                keyUnlockData = KeyUnlockInteractive(),
+                keyUnlockData = KeyUnlockInteractive(
+                    title = "Verify it's you",
+                    subtitle = authMessage
+                ),
             )
         }
 
@@ -749,81 +689,31 @@ object OpenID4VP {
 
     private suspend fun openID4VPSdJwt(
         version: Version,
-        credential: JsonObject,
-        source: PresentmentSource,
-        document: Document?,
-        showDocumentPicker: (suspend (
-            documents: List<Document>,
-        ) -> Document?)?,
-        showConsentPrompt: suspend (
-            document: Document,
-            request: Request,
-            trustPoint: TrustPoint?
-        ) -> Boolean,
+        match: DcqlResponseCredentialSetOptionMemberMatch,
         origin: String?,
         clientId: String,
         nonce: String,
-        requesterCertChain: X509CertChain?,
-        reReaderPublicKey: EcPublicKey?,
-        reEncAlg: Algorithm,
         responseMode: ResponseMode,
     ): String {
-        val meta = credential["meta"]!!.jsonObject
-        val vctValues = meta["vct_values"]!!.jsonArray
-        // TODO: handle multiple VCT values...
-        val vct = vctValues[0].jsonPrimitive.content
-
-        val requestedClaims = mutableListOf<JsonRequestedClaim>()
-        val claims = credential["claims"]!!.jsonArray
-        val documentType = source.documentTypeRepository.getDocumentTypeForJson(vct)
-        for (n in 0 until claims.size) {
-            val claim = claims[n].jsonObject
-            val path = claim["path"]!!.jsonArray
-            val claimName = path.joinToString(separator = ".") { it.jsonPrimitive.content }
-            val attribute = documentType?.jsonDocumentType?.claims?.get(claimName)
-            requestedClaims.add(
-                JsonRequestedClaim(
-                    displayName = attribute?.displayName ?: claimName,
-                    attribute = attribute,
-                    claimPath = path
-                )
-            )
-        }
-
-        val request = JsonRequest(
-            requester = Requester(
-                certChain = requesterCertChain,
-                websiteOrigin = origin
-            ),
-            requestedClaims = requestedClaims,
-            vct = vct
-        )
-        val sdjwtVcCredential = source.selectCredential(
-            document = document,
-            request = request,
-            keyAgreementPossible = emptyList()
-        ) as SdJwtVcCredential?
-        if (sdjwtVcCredential == null) {
-            // TODO: possible dedicated exception
-            throw IllegalStateException("No credential found for vct ${vct}")
-        }
-
-        // Consent prompt..
-        val trustPoint = source.findTrustPoint(request)
-        if (!showConsentPrompt((sdjwtVcCredential as Credential).document, request, trustPoint)) {
-            throw PresentmentCanceled("The user did not consent")
-        }
+        val sdjwtVcCredential = match.credential as SdJwtVcCredential
+        val claims = match.credentialQuery.claims as List<JsonRequestedClaim>
 
         val sdJwt = SdJwt(sdjwtVcCredential.issuerProvidedData.decodeToString())
-        val pathsToDisclose = requestedClaims.map { claim: JsonRequestedClaim -> claim.claimPath }
+        val pathsToDisclose = claims.map { claim: JsonRequestedClaim -> claim.claimPath }
         val filteredSdJwt = sdJwt.filter(pathsToDisclose)
 
         (sdjwtVcCredential as Credential).increaseUsageCount()
         return if (sdjwtVcCredential is SecureAreaBoundCredential) {
+            val authMessage = sdjwtVcCredential.document.metadata.displayName?.let {
+                "Authentication is required to share $it"
+            } ?: "Authentication is required to share the document"
             filteredSdJwt.present(
                 kbSecureArea = sdjwtVcCredential.secureArea,
                 kbAlias = sdjwtVcCredential.alias,
-                kbKeyUnlockData = KeyUnlockInteractive(),
+                kbKeyUnlockData = KeyUnlockInteractive(
+                    title = "Verify it's you",
+                    subtitle = authMessage
+                ),
                 nonce = nonce,
                 audience = if (version == Version.DRAFT_29) {
                     // From B.3.6. Presentation Response:

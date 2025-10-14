@@ -15,6 +15,9 @@ buildConfig {
 
 kotlin {
     jvmToolchain(17)
+    compilerOptions {
+        optIn.add("kotlin.time.ExperimentalTime")
+    }
 }
 
 java {
@@ -41,4 +44,7 @@ tasks.register("runMultipazCtl", JavaExec::class) {
 project.setProperty("mainClassName", "org.multipaz.multipazctl.MultipazCtl")
 
 ktor {
+}
+subprojects {
+	apply(plugin = "org.jetbrains.dokka")
 }

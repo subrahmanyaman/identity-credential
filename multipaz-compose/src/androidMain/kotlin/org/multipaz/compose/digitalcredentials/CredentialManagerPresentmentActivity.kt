@@ -13,29 +13,34 @@ import androidx.credentials.ExperimentalDigitalCredentialApi
 import androidx.credentials.GetCredentialResponse
 import androidx.credentials.GetDigitalCredentialOption
 import androidx.credentials.provider.PendingIntentHandler
+import androidx.credentials.provider.ProviderGetCredentialRequest
 import androidx.credentials.registry.provider.selectedEntryId
 import androidx.fragment.app.FragmentActivity
+import coil3.ImageLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
-import org.json.JSONObject
 import org.multipaz.compose.presentment.Presentment
 import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.context.initializeApplication
 import org.multipaz.documenttype.DocumentTypeRepository
+import org.multipaz.models.digitalcredentials.getAppOrigin
 import org.multipaz.models.digitalcredentials.lookupForCredmanId
 import org.multipaz.models.presentment.DigitalCredentialsPresentmentMechanism
 import org.multipaz.models.presentment.PresentmentModel
 import org.multipaz.models.presentment.PresentmentSource
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.Logger
+import java.lang.IllegalStateException
 
 /**
  * Base class for activity used for Android Credential Manager presentments using the W3C Digital Credentials API.
@@ -50,21 +55,15 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
     }
 
     /**
-     * Must be implemented by the application to specify the application theme to use.
-     *
-     * @return the theme to use.
-     */
-    @Composable
-    abstract fun ApplicationTheme(content: @Composable () -> Unit)
-
-    /**
      * Settings provided by the application for specifying what to present.
      *
      * @property appName the application name.
      * @property appIcon the application icon.
      * @property promptModel the [PromptModel] to use.
+     * @property applicationTheme the theme to use.
      * @property documentTypeRepository a [DocumentTypeRepository]
      * @property presentmentSource the [PresentmentSource] to use as the source of truth for what to present.
+     * @property imageLoader the [ImageLoader] to use.
      * @property privilegedAllowList a string containing JSON with an allow-list of privileged browsers/apps
      *   that the applications trusts to provide the correct origin. For the format of the JSON see
      *   [CallingAppInfo.getOrigin()](https://developer.android.com/reference/androidx/credentials/provider/CallingAppInfo#getOrigin(kotlin.String))
@@ -75,8 +74,10 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
         val appName: String,
         val appIcon: DrawableResource,
         val promptModel: PromptModel,
+        val applicationTheme: @Composable (content: @Composable () -> Unit) -> Unit,
         val documentTypeRepository: DocumentTypeRepository,
         val presentmentSource: PresentmentSource,
+        val imageLoader: ImageLoader,
         val privilegedAllowList: String
     )
 
@@ -109,25 +110,34 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
     private suspend fun startPresentment(settings: Settings) {
         presentmentModel.setPromptModel(settings.promptModel)
         try {
-            val credentialRequest = PendingIntentHandler.retrieveProviderGetCredentialRequest(intent)
-            val credentialId = credentialRequest!!.selectedEntryId!!
+            val credentialRequest = PendingIntentHandler.retrieveProviderGetCredentialRequest(intent)!!
 
             val callingAppInfo = credentialRequest.callingAppInfo
             val callingPackageName = callingAppInfo.packageName
-            val callingOrigin = callingAppInfo.getOrigin(settings.privilegedAllowList)
+            val origin = callingAppInfo.getOrigin(settings.privilegedAllowList)
+                ?: getAppOrigin(callingAppInfo.signingInfoCompat.signingCertificateHistory[0].toByteArray())
             val option = credentialRequest.credentialOptions[0] as GetDigitalCredentialOption
-            val json = JSONObject(option.requestJson)
-            val firstRequest = json.getJSONArray("requests").getJSONObject(0)
+            val json = Json.parseToJsonElement(option.requestJson).jsonObject
+            Logger.iJson(TAG, "Request Json", json)
+            val selectionInfo = getSetSelection(credentialRequest)
+                ?: getSelection(credentialRequest)
+                ?:  throw IllegalStateException("Unable to get credman selection")
+            Logger.i(TAG, "SelectionInfo: $selectionInfo")
 
-            val document = settings.presentmentSource.documentStore.lookupForCredmanId(credentialId)
-                ?: throw Error("No registered document for ID $credentialId")
-
+            val documents = selectionInfo.documentIds.map {
+                settings.presentmentSource.documentStore.lookupForCredmanId(it)
+                    ?: throw Error("No registered document for document ID $it")
+            }
+            // Find request matching the protocol for the selected entry...
+            val requestForSelectedEntry = json["requests"]!!.jsonArray.find {
+                (it as JsonObject)["protocol"]!!.jsonPrimitive.content == selectionInfo.protocol
+            }!!.jsonObject
             val mechanism = object : DigitalCredentialsPresentmentMechanism(
                 appId = callingPackageName,
-                webOrigin = callingOrigin,
-                protocol = firstRequest.getString("protocol"),
-                data = firstRequest.getString("data"),
-                document = document
+                origin = origin,
+                protocol = requestForSelectedEntry["protocol"]!!.jsonPrimitive.content,
+                data = requestForSelectedEntry["data"]!!.jsonObject,
+                preselectedDocuments = documents
             ) {
                 override fun sendResponse(
                     protocol: String,
@@ -140,7 +150,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
                             put("data", data)
                         }
                     )
-                    Logger.i(TAG, "Size of JSON response: ${json.length} bytes")
+                    Logger.i(TAG, "Size of JSON response for protocol $protocol: ${json.length} bytes")
                     val response = GetCredentialResponse(DigitalCredential(json))
                     PendingIntentHandler.setGetCredentialResponse(
                         resultData,
@@ -166,7 +176,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
         }
 
         setContent {
-            ApplicationTheme {
+            settings.applicationTheme {
                 PromptDialogs(settings.promptModel)
                 Presentment(
                     appName = settings.appName,
@@ -174,6 +184,7 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
                     presentmentModel = presentmentModel,
                     presentmentSource = settings.presentmentSource,
                     documentTypeRepository = settings.documentTypeRepository,
+                    imageLoader = settings.imageLoader,
                     onPresentmentComplete = { finish() },
                     onlyShowConsentPrompt = true,
                     showCancelAsBack = true
@@ -185,4 +196,44 @@ abstract class CredentialManagerPresentmentActivity: FragmentActivity() {
     override fun onDestroy() {
         super.onDestroy()
     }
+}
+
+private data class SelectionInfo(
+    val protocol: String,
+    val documentIds: List<String>
+)
+
+private fun getSetSelection(request: ProviderGetCredentialRequest): SelectionInfo? {
+    // TODO: replace sourceBundle peeking when we upgrade to a new Credman Jetpack..
+    val setId = request.sourceBundle!!.getString("androidx.credentials.registry.provider.extra.CREDENTIAL_SET_ID")
+        ?: return null
+    val setElementLength = request.sourceBundle!!.getInt(
+        "androidx.credentials.registry.provider.extra.CREDENTIAL_SET_ELEMENT_LENGTH", 0
+    )
+    val credIds = mutableListOf<String>()
+    for (n in 0 until setElementLength) {
+        val credId = request.sourceBundle!!.getString(
+            "androidx.credentials.registry.provider.extra.CREDENTIAL_SET_ELEMENT_ID_$n"
+        ) ?: return null
+        val splits = credId.split(" ")
+        require(splits.size == 3) { "Expected CredId $n to have three parts, got ${splits.size}" }
+        credIds.add(splits[2])
+    }
+    val splits = setId.split(" ")
+    require(splits.size == 2) { "Expected SetId to have two parts, got ${splits.size}" }
+    return SelectionInfo(
+        protocol = splits[1],
+        documentIds = credIds
+    )
+}
+
+private fun getSelection(request: ProviderGetCredentialRequest): SelectionInfo? {
+    val selectedEntryId = request.selectedEntryId
+        ?: throw IllegalStateException("selectedEntryId is null")
+    val splits = selectedEntryId.split(" ")
+    require(splits.size == 3) { "Expected CredId to have three parts, got ${splits.size}" }
+    return SelectionInfo(
+        protocol = splits[1],
+        documentIds = listOf(splits[2])
+    )
 }

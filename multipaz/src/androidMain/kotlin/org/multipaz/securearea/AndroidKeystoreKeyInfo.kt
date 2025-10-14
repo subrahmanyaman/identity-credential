@@ -2,7 +2,8 @@ package org.multipaz.securearea
 
 import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.EcPublicKey
-import kotlinx.datetime.Instant
+import kotlin.time.Duration
+import kotlin.time.Instant
 
 /**
  * Android Keystore specific class for information about a key.
@@ -27,7 +28,7 @@ class AndroidKeystoreKeyInfo internal constructor(
      * The timeout for user authentication or 0 if user authentication is needed for
      * every use of the key.
      */
-    val userAuthenticationTimeoutMillis: Long,
+    val userAuthenticationTimeout: Duration,
 
     /**
      * The set of possible ways an user can authentication to unlock the key.

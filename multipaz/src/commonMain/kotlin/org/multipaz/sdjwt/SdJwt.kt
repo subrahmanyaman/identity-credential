@@ -1,7 +1,7 @@
 package org.multipaz.sdjwt
 
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -295,6 +295,7 @@ class SdJwt(
      * @param nonce the nonce, obtained from the verifier.
      * @param audience the audience, obtained from the verifier.
      * @param creationTime the time the presentation was made.
+     * @return a [SdJwtKb].
      */
     fun present(
         kbKey: EcPrivateKey,

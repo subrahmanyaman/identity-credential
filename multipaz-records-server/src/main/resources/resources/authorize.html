@@ -3,20 +3,111 @@
 <head>
     <title>Utopia Registry Authentication</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="style.css" />
+    <style>
+        label span {
+            display: inline-block;
+            width: 6em;
+            text-align: end;
+        }
+        select {
+            width: auto;
+        }
+    </style>
 </head>
 <body>
-<h1>Utopia Registry Authentication</h1>
-<p>Requested record type: $scope</p>
+<div id="main">
+<h1 class="state_name">State</h1>
+<h2>Authorization</h2>
+<h3>Requested record type: $scope</h3>
+<p>
+    You are playing the role of a <i class="subject_name">user</i> of
+    <i class="state_name">State</i>. You are
+    trying to access information in <i class="state_name">State</i> system about
+    yourself (e.g. to request a digital identity). In the real world,
+    this would require authenticating yourself in some way. In the
+    fictional <i class="state_name">State</i> world, <i class="subject_name">user</i>s
+    are fully trusted and are just allowed to select their identity below in leu of
+    a real authentication. Select "[Not authenticated]" to emulate failed authentication.
+</p>
 <h2>Verify your identity</h2>
 <form action="authorize" method="post">
     <input type="hidden" name="authorizationCode" value="$authorizationCode"/>
-    <label for="given_name">First name:</label>
-    <input type="text" id="given_name" name="given_name" value="Ivan"/><br/>
-    <label for="family_name">Last name:</label>
-    <input type="text" id="family_name" name="family_name" value="Ksiva"/><br/>
-    <label for="birth_date">Last name:</label>
-    <input type="date" id="birth_date" name="birth_date" value="1998-09-04"/><br/>
-    <button>Verify</button>
+    <label for="person">
+        <span>Identity:</span>
+        <select id="person" name="person">
+            <option value="">[Not authenticated]</option>
+        </select>
+    </label>
+    <div id="instanceRow" style="display:none">
+        <p>There are multiple instances for the requested record type for this person.
+            Please select the desired instance.
+        </p>
+        <label class="label">
+            <span>Instance:</span>
+            <select id="instance" name="instance">
+                <option value=""></option>
+            </select>
+        </label>
+    </div>
+    <p id="noInstances" style="display:none">
+        No instances of the requested record type for this person.
+    </p>
+    <p>
+        <button id="button">Select</button>
+    </p>
 </form>
+</div>
 </body>
+<script>
+    let scope = "$scope";
+    let personMap = $personMap;
+    let select = document.getElementById("person");
+    let instanceElement = document.getElementById("instance");
+    let instanceRow = document.getElementById("instanceRow");
+    let noInstances = document.getElementById("noInstances");
+    let button = document.getElementById("button");
+    for (let personId in personMap) {
+        let person = personMap[personId]
+        let option = document.createElement("option")
+        option.value = personId;
+        option.textContent = person.name;
+        select.appendChild(option);
+    }
+    select.addEventListener("change", function() {
+        let personId = select.value;
+        let person = personMap[personId];
+        let instanceMap = person ? person.instances : null;
+        let count = 0;
+        instanceElement.innerHTML = "";
+        if (instanceMap != null) {
+            for (let instanceId in instanceMap) {
+                let option = document.createElement("option")
+                option.value = instanceId;
+                option.textContent = instanceMap[instanceId];
+                instanceElement.appendChild(option);
+                count++;
+            }
+        }
+        button.disabled = false;
+        noInstances.style.display = "none";
+        if (count > 1) {
+            instanceRow.style.display = "";
+        } else if (count == 1) {
+            instanceRow.style.display = "none";
+        } else if (personId == "") {
+            // Special case to test failed authentication workflow
+            instanceRow.style.display = "none";
+            instanceElement.innerHTML = '<option value=""></option>';
+        } else if (scope == "core") {
+            instanceRow.style.display = "none";
+            instanceElement.innerHTML = '<option value=""></option>';
+        } else {
+            instanceRow.style.display = "none";
+            button.disabled = true;
+            noInstances.style.display = "";
+        }
+    });
+</script>
+<script src="metadata.js"></script>
 </html>

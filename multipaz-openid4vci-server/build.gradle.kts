@@ -13,6 +13,7 @@ kotlin {
 
     compilerOptions {
         allWarningsAsErrors = true
+        optIn.add("kotlin.time.ExperimentalTime")
     }
 }
 
@@ -43,7 +44,12 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.ktor.server.test.host)
 }
 
 ktor {
+}
+
+subprojects {
+	apply(plugin = "org.jetbrains.dokka")
 }

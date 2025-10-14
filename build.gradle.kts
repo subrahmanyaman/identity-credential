@@ -1,4 +1,5 @@
 import org.apache.commons.io.output.ByteArrayOutputStream
+import org.jetbrains.dokka.gradle.DokkaTaskPartial
 
 // For `versionCode` we just use the number of commits.
 val projectVersionCode: Int by extra {
@@ -16,8 +17,8 @@ val projectVersionCode: Int by extra {
 // For a tagged release, projectVersionNext should be blank and the next commit
 // following the release should bump it to the next version number.
 //
-val projectVersionLast = "0.92.1"
-val projectVersionNext = "0.93.0"
+val projectVersionLast = "0.94.0"
+val projectVersionNext = "0.95.0"
 
 private fun runCommand(args: List<String>): String {
     val stdout = ByteArrayOutputStream()
@@ -61,10 +62,21 @@ plugins {
     alias(libs.plugins.compose.compiler) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
     alias(libs.plugins.jetbrains.kotlin.jvm) apply false
-    alias(libs.plugins.gretty) apply false
     alias(libs.plugins.navigation.safe.args) apply false
     alias(libs.plugins.parcelable) apply false
     alias(libs.plugins.buildconfig) apply false
-    alias(libs.plugins.kotlinCocoapods) apply false
     alias(libs.plugins.skie) apply false
+    id("org.jetbrains.dokka") version "2.0.0"
+}
+
+subprojects {
+    apply(plugin = "org.jetbrains.dokka")
+}
+
+tasks.named("dokkaHtmlMultiModule") {
+    dependsOn(
+        ":samples:dokkaHtmlMultiModule",
+        ":multipaz:dokkaHtmlMultiModule",
+        ":multipaz-models:dokkaHtmlMultiModule"
+    )
 }

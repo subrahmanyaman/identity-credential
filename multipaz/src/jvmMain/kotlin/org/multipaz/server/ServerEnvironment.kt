@@ -18,9 +18,11 @@ import org.multipaz.rpc.handler.RpcNotificationsLocalPoll
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.securearea.SecureArea
 import org.multipaz.securearea.SecureAreaProvider
+import org.multipaz.securearea.SecureAreaRepository
 import org.multipaz.securearea.software.SoftwareSecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTableSpec
+import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.storage.jdbc.JdbcStorage
 import java.io.File
 import kotlin.random.Random
@@ -35,6 +37,7 @@ class ServerEnvironment(
     private val storage: Storage,
     private val httpClient: HttpClient,
     private val secureAreaProvider: SecureAreaProvider<SecureArea>,
+    private val secureAreaRepository: SecureAreaRepository,
     val notifications: RpcNotificationsLocalPoll,
     val cipher: SimpleCipher
 ): BackendEnvironment {
@@ -47,6 +50,7 @@ class ServerEnvironment(
             RpcNotifications::class -> notifications
             HttpClient::class -> httpClient
             SecureAreaProvider::class -> secureAreaProvider
+            SecureAreaRepository::class -> secureAreaRepository
             RpcAuthInspector::class -> RpcAuthInspectorAssertion.Default
             SimpleCipher::class -> cipher
             else -> return null
@@ -66,13 +70,20 @@ class ServerEnvironment(
             }
         }
 
-        private suspend fun initialize(configuration: Configuration): ServerEnvironment {
+        private suspend fun initialize(
+            configuration: Configuration,
+            additionalSecureAreas: List<SecureAreaProvider<SecureArea>> = listOf()
+        ): ServerEnvironment {
 
-            val storage = JdbcStorage(
-                configuration.getValue("database_connection") ?: defaultDatabase(),
-                configuration.getValue("database_user") ?: "",
-                configuration.getValue("database_password") ?: ""
-            )
+            val storage = when (val engine = configuration.getValue("database_engine")) {
+                "jdbc", null -> JdbcStorage(
+                    configuration.getValue("database_connection") ?: defaultDatabase(),
+                    configuration.getValue("database_user") ?: "",
+                    configuration.getValue("database_password") ?: ""
+                )
+                "ephemeral" -> EphemeralStorage()
+                else -> throw IllegalArgumentException("Unknown database engine: $engine")
+            }
 
             val httpClient = HttpClient(Java) {
                 followRedirects = false
@@ -81,6 +92,15 @@ class ServerEnvironment(
             val secureAreaProvider = SecureAreaProvider(Dispatchers.Default) {
                 SoftwareSecureArea.create(storage)
             }
+
+            val secureAreaRepository = SecureAreaRepository.Builder()
+                .add(secureAreaProvider.get())
+                .also {
+                    for (secureArea in additionalSecureAreas) {
+                        it.add(secureArea.get())
+                    }
+                }
+                .build()
 
             val table = storage.getTable(flowRootStateTableSpec)
             val key = table.get("messageEncryptionKey")
@@ -103,6 +123,7 @@ class ServerEnvironment(
                 storage,
                 httpClient,
                 secureAreaProvider,
+                secureAreaRepository,
                 localPoll,
                 cipher
             )

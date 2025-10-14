@@ -1,6 +1,6 @@
 package org.multipaz.sdjwt
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -38,6 +38,15 @@ class SdJwtKb(
     private val kbHeader: String
     private val kbBody: String
     private val kbSignature: String
+
+    /**
+     * The body of the SD-JWT+KB.
+     *
+     * This contains the claims signed by the device-bound key.
+     */
+    val jwtBody: JsonObject by lazy {
+        Json.decodeFromString<JsonObject>(kbBody.fromBase64Url().decodeToString())
+    }
 
     init {
         if (compactSerialization.endsWith('~')) {
@@ -81,22 +90,20 @@ class SdJwtKb(
             throw SignatureVerificationException("Error validating KB signature", e)
         }
 
-        val kbBodyObj = Json.decodeFromString(JsonObject.serializer(), kbBody!!.fromBase64Url().decodeToString())
-
         val compactSerializationWithoutKB = compactSerialization.substringBeforeLast("~") + "~"
         val expectedSdHash = Crypto.digest(sdJwt.digestAlg, compactSerializationWithoutKB.encodeToByteArray()).toBase64Url()
-        val sdHash = kbBodyObj["sd_hash"]!!.jsonPrimitive.content
+        val sdHash = jwtBody["sd_hash"]!!.jsonPrimitive.content
         if (expectedSdHash != sdHash) {
             throw IllegalStateException("Error validating KB body - sd_hash didn't match")
         }
 
-        if (!checkNonce(kbBodyObj["nonce"]!!.jsonPrimitive.content)) {
+        if (!checkNonce(jwtBody["nonce"]!!.jsonPrimitive.content)) {
             throw IllegalStateException("Failed verification of nonce")
         }
-        if (!checkAudience(kbBodyObj["aud"]!!.jsonPrimitive.content)) {
+        if (!checkAudience(jwtBody["aud"]!!.jsonPrimitive.content)) {
             throw IllegalStateException("Failed verification of audience")
         }
-        val creationTime = Instant.fromEpochSeconds(kbBodyObj["iat"]!!.jsonPrimitive.content.toLong())
+        val creationTime = Instant.fromEpochSeconds(jwtBody["iat"]!!.jsonPrimitive.content.toLong())
         if (!checkCreationTime(creationTime)) {
             throw IllegalStateException("Failed verification of creationTime")
         }

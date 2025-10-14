@@ -1,7 +1,7 @@
 package org.multipaz.rpc.handler
 
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.DataItem
@@ -25,7 +25,6 @@ class RpcAuthIssuerAssertion(
     private val secureArea: SecureArea,
     private val deviceAttestationId: String
 ): RpcAuthIssuer {
-    val lock = Mutex()
     override suspend fun auth(target: String, method: String, payload: Bstr): DataItem {
         val sessionContext = coroutineContext[RpcAuthClientSession.Key]
             ?: throw IllegalStateException("RpcAuthClientSessionContext must be provided")

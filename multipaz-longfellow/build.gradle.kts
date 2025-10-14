@@ -14,6 +14,11 @@ val projectVersionName: String by rootProject.extra
 kotlin {
     jvmToolchain(17)
 
+    compilerOptions {
+        optIn.add("kotlin.time.ExperimentalTime")
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     jvm()
 
     androidTarget {
@@ -133,4 +138,8 @@ tasks.withType<Test>().configureEach {
         // Ensure native libraries are included in the runtime classpath
         systemProperty("java.library.path", nativeLibPath)
     }
+}
+
+subprojects {
+	apply(plugin = "org.jetbrains.dokka")
 }

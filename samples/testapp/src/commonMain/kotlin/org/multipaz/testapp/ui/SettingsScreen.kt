@@ -30,6 +30,7 @@ import org.multipaz.testapp.Platform
 import org.multipaz.testapp.TestAppSettingsModel
 import org.multipaz.testapp.platform
 import org.multipaz.compose.cards.WarningCard
+import org.multipaz.models.digitalcredentials.DigitalCredentials
 import org.multipaz.testapp.platformCryptoInit
 import org.multipaz.testapp.platformRestartApp
 
@@ -170,6 +171,13 @@ fun SettingsScreen(
         }
         item {
             SettingToggle(
+                title = "Use L2CAP in engagement if available",
+                isChecked = app.settingsModel.presentmentBleL2CapInEngagementEnabled.collectAsState().value,
+                onCheckedChange = { app.settingsModel.presentmentBleL2CapInEngagementEnabled.value = it },
+            )
+        }
+        item {
+            SettingToggle(
                 title = "Keep connection open after first request",
                 isChecked = app.settingsModel.presentmentAllowMultipleRequests.collectAsState().value,
                 onCheckedChange = { app.settingsModel.presentmentAllowMultipleRequests.value = it },
@@ -225,10 +233,48 @@ fun SettingsScreen(
         }
         item {
             SettingToggle(
+                title = "Use L2CAP in engagement if available",
+                isChecked = app.settingsModel.readerBleL2CapInEngagementEnabled.collectAsState().value,
+                onCheckedChange = { app.settingsModel.readerBleL2CapInEngagementEnabled.value = it },
+            )
+        }
+        item {
+            SettingToggle(
                 title = "Keep connection open after first request",
                 isChecked = app.settingsModel.readerAllowMultipleRequests.collectAsState().value,
                 onCheckedChange = { app.settingsModel.readerAllowMultipleRequests.value = it },
             )
+        }
+
+        item {
+            HorizontalDivider(
+                modifier = Modifier.padding(8.dp)
+            )
+        }
+
+        item {
+            SettingHeadline("Digital Credentials API Options")
+        }
+        if (DigitalCredentials.Default.available) {
+            for (protocol in DigitalCredentials.Default.supportedProtocols.sorted()) {
+                item {
+                    SettingToggle(
+                        title = "Protocol: $protocol",
+                        isChecked = app.settingsModel.dcApiProtocols.collectAsState().value.contains(protocol),
+                        onCheckedChange = {
+                            val mutableSet = app.settingsModel.dcApiProtocols.value.toMutableSet()
+                            if (it) mutableSet.add(protocol) else mutableSet.remove(protocol)
+                            app.settingsModel.dcApiProtocols.value = mutableSet
+                        },
+                    )
+                }
+            }
+        } else {
+            item {
+                WarningCard {
+                    Text("Digital Credentials API is not supported on ${platform.displayName}")
+                }
+            }
         }
 
         item {

@@ -6,53 +6,39 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
 import org.multipaz.models.presentment.PresentmentCanceled
 import org.multipaz.models.presentment.PresentmentModel
 import org.multipaz.models.presentment.PresentmentSource
 import org.multipaz.models.presentment.PresentmentTimeout
-import org.multipaz.document.Document
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.prompt.PromptModel
 import org.multipaz.multipaz_compose.generated.resources.Res
 import org.multipaz.multipaz_compose.generated.resources.presentment_canceled
 import org.multipaz.multipaz_compose.generated.resources.presentment_connecting_to_reader
-import org.multipaz.multipaz_compose.generated.resources.presentment_document_picker_cancel
-import org.multipaz.multipaz_compose.generated.resources.presentment_document_picker_continue
-import org.multipaz.multipaz_compose.generated.resources.presentment_document_picker_text
-import org.multipaz.multipaz_compose.generated.resources.presentment_document_picker_title
 import org.multipaz.multipaz_compose.generated.resources.presentment_error
 import org.multipaz.multipaz_compose.generated.resources.presentment_icon_error
 import org.multipaz.multipaz_compose.generated.resources.presentment_icon_success
@@ -64,10 +50,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.ExperimentalResourceApi
-import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import org.multipaz.compose.consent.ConsentModalBottomSheet
 import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "Presentment"
@@ -86,6 +70,7 @@ private const val TAG = "Presentment"
  * @param presentmentSource an object for application to provide data and policy.
  * @param documentTypeRepository a [DocumentTypeRepository] used to find metadata about documents being requested.
  * @param onPresentmentComplete called when the presentment is complete.
+ * @param imageLoader an [ImageLoader] for loading images from the network.
  * @param onlyShowConsentPrompt if `true` only the consent prompt will be shown, never any other graphics. This is
  *   useful if using a translucent activity.
  * @param showCancelAsBack if `true` the cancel button will say "Back" instead of "Cancel".
@@ -99,6 +84,7 @@ fun Presentment(
     presentmentModel: PresentmentModel,
     presentmentSource: PresentmentSource,
     documentTypeRepository: DocumentTypeRepository,
+    imageLoader: ImageLoader,
     onPresentmentComplete: () -> Unit,
     onlyShowConsentPrompt: Boolean = false,
     showCancelAsBack: Boolean = false,
@@ -124,11 +110,15 @@ fun Presentment(
             presentmentModel.setSource(presentmentSource)
         }
         PresentmentModel.State.PROCESSING -> {}
-        PresentmentModel.State.WAITING_FOR_DOCUMENT_SELECTION -> {
-            DocumentPickerDialog(coroutineScope, presentmentModel)
-        }
         PresentmentModel.State.WAITING_FOR_CONSENT -> {
-            ConsentPrompt(coroutineScope, presentmentModel, appName, appIconPainter, showCancelAsBack)
+            ConsentPrompt(
+                coroutineScope = coroutineScope,
+                presentmentModel = presentmentModel,
+                appName = appName,
+                appIconPainter = appIconPainter,
+                imageLoader = imageLoader,
+                showCancelAsBack = showCancelAsBack
+            )
         }
         PresentmentModel.State.COMPLETED -> {
             if (onlyShowConsentPrompt) {
@@ -164,7 +154,6 @@ fun Presentment(
                     }
 
                     PresentmentModel.State.WAITING_FOR_SOURCE,
-                    PresentmentModel.State.WAITING_FOR_DOCUMENT_SELECTION,
                     PresentmentModel.State.WAITING_FOR_CONSENT,
                     PresentmentModel.State.PROCESSING -> {
                         Triple(
@@ -266,124 +255,36 @@ private fun ConsentPrompt(
     presentmentModel: PresentmentModel,
     appName: String?,
     appIconPainter: Painter?,
+    imageLoader: ImageLoader,
     showCancelAsBack: Boolean
 ) {
-    val documentMetadata = presentmentModel.consentData.document.metadata
-    val cardArt = documentMetadata.cardArt?.let { remember { it.toByteArray().decodeToImageBitmap() } }
     // TODO: use sheetGesturesEnabled=false when available - see
     //  https://issuetracker.google.com/issues/288211587 for details
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
     )
-
-    ConsentModalBottomSheet(
+    CredentialPresentmentModalBottomSheet(
         sheetState = sheetState,
-        request = presentmentModel.consentData.request,
-        documentName = documentMetadata.displayName!!,
-        documentDescription = documentMetadata.typeDisplayName!!,
-        documentCardArt = cardArt,
+        requester = presentmentModel.consentData.requester,
         trustPoint = presentmentModel.consentData.trustPoint,
+        credentialPresentmentData = presentmentModel.consentData.credentialPresentmentData,
+        preselectedDocuments = presentmentModel.consentData.preselectedDocuments,
+        imageLoader = imageLoader,
+        dynamicMetadataResolver = presentmentModel.consentData.dynamicMetadataResolver,
         appName = appName,
         appIconPainter = appIconPainter,
-        onConfirm = {
+        onConfirm = { selection ->
             coroutineScope.launch {
                 sheetState.hide()
             }
-            presentmentModel.consentReviewed(true)
+            presentmentModel.consentObtained(selection)
         },
         onCancel = {
-            println("foo")
             coroutineScope.launch {
                 sheetState.hide()
             }
-            presentmentModel.consentReviewed(false)
+            presentmentModel.consentObtained(null)
         },
         showCancelAsBack = showCancelAsBack
-    )
-}
-
-private data class DocumentPickerData(
-    val document: Document,
-    val displayName: String,
-    val displayType: String,
-    val cardArt: ImageBitmap
-)
-
-@OptIn(ExperimentalResourceApi::class)
-@Composable
-private fun DocumentPickerDialog(
-    coroutineScope: CoroutineScope,
-    presentmentModel: PresentmentModel
-) {
-    val radioOptions = remember {
-        presentmentModel.availableDocuments.map {
-            val documentMetadata = it.metadata
-            DocumentPickerData(
-                document = it,
-                displayName = documentMetadata.displayName!!,
-                displayType = documentMetadata.typeDisplayName!!,
-                cardArt = documentMetadata.cardArt!!.toByteArray().decodeToImageBitmap()
-            )
-        }
-    }
-
-    val (selectedOption, onOptionSelected) = remember { mutableStateOf(radioOptions[0]) }
-    AlertDialog(
-        title = @Composable { Text(text = stringResource(Res.string.presentment_document_picker_title)) },
-        text = @Composable {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(text = stringResource(Res.string.presentment_document_picker_text))
-                Column(
-                    modifier = Modifier.selectableGroup(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    radioOptions.forEach { entry ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .selectable(
-                                    selected = (entry == selectedOption),
-                                    onClick = { onOptionSelected(entry) },
-                                    role = Role.RadioButton
-                                )
-                                .padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            RadioButton(
-                                selected = (entry == selectedOption),
-                                onClick = null
-                            )
-                            Icon(
-                                modifier = Modifier.size(32.dp),
-                                bitmap = entry.cardArt,
-                                contentDescription = null,
-                                tint = Color.Unspecified
-                            )
-                            Text(
-                                text = entry.displayName.toString(),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                    }
-                }
-
-            }
-        },
-        dismissButton = @Composable {
-            TextButton(
-                onClick = { presentmentModel.documentSelected(null) }
-            ) {
-                Text(stringResource(Res.string.presentment_document_picker_cancel))
-            }
-        },
-        onDismissRequest = { presentmentModel.documentSelected(null) },
-        confirmButton = @Composable {
-            TextButton(
-                onClick = { presentmentModel.documentSelected(selectedOption.document) }
-            ) {
-                Text(stringResource(Res.string.presentment_document_picker_continue))
-            }
-        }
     )
 }

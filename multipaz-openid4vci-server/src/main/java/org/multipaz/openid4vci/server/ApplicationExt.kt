@@ -33,14 +33,17 @@ import org.multipaz.openid4vci.request.credential
 import org.multipaz.openid4vci.request.credentialRequest
 import org.multipaz.openid4vci.request.fetchResource
 import org.multipaz.openid4vci.request.finishAuthorization
+import org.multipaz.openid4vci.request.preauthorizedOffer
 import org.multipaz.openid4vci.request.nonce
 import org.multipaz.openid4vci.request.openid4VpResponse
 import org.multipaz.openid4vci.request.pushedAuthorizationRequest
 import org.multipaz.openid4vci.request.qrCode
+import org.multipaz.openid4vci.request.signingCertificate
 import org.multipaz.openid4vci.request.token
 import org.multipaz.openid4vci.request.wellKnownOauthAuthorization
 import org.multipaz.openid4vci.request.wellKnownOpenidCredentialIssuer
 import org.multipaz.openid4vci.util.AUTHZ_REQ
+import org.multipaz.openid4vci.util.OpenID4VCIRequestError
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.server.ServerConfiguration
 import org.multipaz.server.ServerEnvironment
@@ -72,14 +75,26 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
             } catch (err: CancellationException) {
                 throw err
             } catch (err: InvalidRequestException) {
-                // TODO: format in request-specific way
+                // TODO: migrate to OpenID4VCIRequestError for cases when error must be set to
+                //  anything other than "invalid_request".
                 Logger.e(TAG, "Error", err)
                 err.printStackTrace()
                 call.respondText(
                     status = HttpStatusCode.BadRequest,
                     text = buildJsonObject {
-                        put("error", "invalid")
+                        put("error", "invalid_request")
                         put("error_description", err.message ?: "")
+                    }.toString(),
+                    contentType = ContentType.Application.Json
+                )
+            } catch (err: OpenID4VCIRequestError) {
+                Logger.e(TAG, "OpenID4VCI Error", err)
+                err.printStackTrace()
+                call.respondText(
+                    status = HttpStatusCode.BadRequest,
+                    text = buildJsonObject {
+                        put("error", err.code)
+                        put("error_description", err.description)
                     }.toString(),
                     contentType = ContentType.Application.Json
                 )
@@ -117,6 +132,12 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
         }
         get("/.well-known/oauth-authorization-server") {
             runRequest { wellKnownOauthAuthorization(call) }
+        }
+        get("/signing_certificate") {
+            runRequest { signingCertificate(call) }
+        }
+        post("/preauthorized_offer") {
+            runRequest { preauthorizedOffer(call) }
         }
     }
 }
@@ -167,7 +188,8 @@ fun Application.traceCalls(configuration: ServerConfiguration) {
         if (call.request.httpMethod == HttpMethod.Post || call.request.httpMethod == HttpMethod.Put) {
             val contentType = call.request.contentType()
             if (contentType == ContentType.Application.Json ||
-                contentType == ContentType.Application.FormUrlEncoded) {
+                contentType == ContentType.Application.FormUrlEncoded ||
+                contentType == ContentType.Application.FormUrlEncoded.withParameter("charset", "UTF-8")) {
                 trace.println()
                 trace.println(call.receiveText())
             } else {

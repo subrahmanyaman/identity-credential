@@ -16,7 +16,6 @@
 
 package org.multipaz.documenttype.knowntypes
 
-import org.multipaz.cbor.CborArray
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.toDataItem
@@ -27,10 +26,12 @@ import org.multipaz.documenttype.Icon
 import org.multipaz.documenttype.IntegerOption
 import org.multipaz.documenttype.StringOption
 import org.multipaz.util.fromBase64Url
-import org.multipaz.util.fromHex
 import kotlinx.datetime.LocalDate
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.addCborMap
 import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.cbor.putCborMap
 
 /**
  * Object containing the metadata of the Driving License
@@ -151,13 +152,13 @@ object DrivingLicense {
                 buildCborArray {
                     addCborMap {
                         put("vehicle_category_code", "A")
-                        put("issue_date", Tagged(1004, Tstr("2018-08-09")))
-                        put("expiry_date", Tagged(1004, Tstr("2028-09-01")))
+                        put("issue_date", Tagged(Tagged.FULL_DATE_STRING, Tstr("2018-08-09")))
+                        put("expiry_date", Tagged(Tagged.FULL_DATE_STRING, Tstr("2028-09-01")))
                     }
                     addCborMap {
                         put("vehicle_category_code", "B")
-                        put("issue_date", Tagged(1004, Tstr("2017-02-23")))
-                        put("expiry_date", Tagged(1004, Tstr("2028-09-01")))
+                        put("issue_date", Tagged(Tagged.FULL_DATE_STRING, Tstr("2017-02-23")))
+                        put("expiry_date", Tagged(Tagged.FULL_DATE_STRING, Tstr("2028-09-01")))
                     }
                 }
             )
@@ -189,7 +190,7 @@ object DrivingLicense {
                 false,
                 MDL_NAMESPACE,
                 Icon.EMERGENCY,
-                SampleData.SEX_ISO218.toDataItem()
+                SampleData.SEX_ISO_5218.toDataItem()
             )
             .addMdocAttribute(
                 DocumentAttributeType.Number,
@@ -494,10 +495,10 @@ object DrivingLicense {
                 "domestic_driving_privileges",
                 "Domestic Driving Privileges",
                 "Vehicle types the license holder is authorized to operate",
-                false,
+                true,
                 AAMVA_NAMESPACE,
                 Icon.DIRECTIONS_CAR,
-                null
+                buildCborArray {}
             )
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(Options.AAMVA_NAME_SUFFIX),
@@ -554,7 +555,7 @@ object DrivingLicense {
                 true,
                 AAMVA_NAMESPACE,
                 Icon.PERSON,
-                null
+                "N".toDataItem()
             )
             .addMdocAttribute(
                 DocumentAttributeType.StringOptions(
@@ -571,7 +572,7 @@ object DrivingLicense {
                 true,
                 AAMVA_NAMESPACE,
                 Icon.PERSON,
-                null
+                "N".toDataItem()
             )
             .addMdocAttribute(
                 DocumentAttributeType.String,
@@ -703,7 +704,7 @@ object DrivingLicense {
                 false,
                 AAMVA_NAMESPACE,
                 Icon.PLACE,
-                null
+                "037".toDataItem()
             )
             .addMdocAttribute(
                 DocumentAttributeType.Date,
@@ -723,7 +724,7 @@ object DrivingLicense {
                 true,
                 AAMVA_NAMESPACE,
                 Icon.EMERGENCY,
-                SampleData.SEX_ISO218.toDataItem()
+                SampleData.SEX_ISO_5218.toDataItem()
             )
             /*
              * Then the attributes that exist only in the mDL Credential Type and not in the VC Credential Type
@@ -786,7 +787,7 @@ object DrivingLicense {
                 true,
                 AAMVA_NAMESPACE,
                 Icon.NUMBERS,
-                null
+                1.toDataItem()
             )
             .addSampleRequest(
                 id = "us-transportation",

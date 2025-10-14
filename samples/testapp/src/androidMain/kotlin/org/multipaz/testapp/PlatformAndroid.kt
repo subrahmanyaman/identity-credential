@@ -1,37 +1,24 @@
 package org.multipaz.testapp
 
-import android.app.AlarmManager
-import android.app.PendingIntent
-import android.content.Context
-import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
-import androidx.compose.ui.platform.LocalContext
-import androidx.fragment.app.FragmentActivity
+import android.widget.Toast
 import com.jakewharton.processphoenix.ProcessPhoenix
 import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.engine.android.Android
 import org.multipaz.context.applicationContext
-import org.multipaz.securearea.AndroidKeystoreCreateKeySettings
 import org.multipaz.securearea.AndroidKeystoreSecureArea
-import org.multipaz.securearea.UserAuthenticationType
-import org.multipaz.securearea.CreateKeySettings
-import org.multipaz.securearea.SecureArea
-import org.multipaz.securearea.SecureAreaProvider
-import org.multipaz.storage.Storage
-import org.multipaz.storage.android.AndroidStorage
-import kotlinx.datetime.Instant
-import kotlinx.io.bytestring.ByteString
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.app_icon
 import multipazproject.samples.testapp.generated.resources.app_icon_red
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.multipaz.compose.notifications.NotificationManagerAndroid
-import org.multipaz.context.getActivity
-import org.multipaz.crypto.Algorithm
+import org.multipaz.models.digitalcredentials.getAppOrigin
+import org.multipaz.nfc.NfcTagReader
 import org.multipaz.prompt.AndroidPromptModel
 import org.multipaz.prompt.PromptModel
+import org.multipaz.testapp.externalnfc.nfcTagReaderUsbCheck
 import org.multipaz.util.Logger
-import java.io.File
 import java.net.NetworkInterface
 import java.security.Security
 
@@ -90,37 +77,6 @@ actual val platformSecureAreaHasKeyAgreement by lazy {
     AndroidKeystoreSecureArea.Capabilities().keyAgreementSupported
 }
 
-actual fun platformCreateKeySettings(
-    challenge: ByteString,
-    algorithm: Algorithm,
-    userAuthenticationRequired: Boolean,
-    validFrom: Instant,
-    validUntil: Instant
-): CreateKeySettings {
-    check(algorithm.fullySpecified)
-    var timeoutMillis = 0L
-    // Work around Android bug where ECDH keys don't work with timeout 0, see
-    // AndroidKeystoreUnlockData.cryptoObjectForKeyAgreement for details...
-    //
-    // Also, on some devices (not all!) using both face and fingerprint the time
-    // spent in the biometric prompt counts against the timeout... so if we use a low
-    // value like one second it'll cause a second biometric prompt to appear. Work
-    // around this bug by using a high timeout.
-    //
-    if (algorithm.isKeyAgreement) {
-        timeoutMillis = 15_000L
-    }
-    return AndroidKeystoreCreateKeySettings.Builder(challenge)
-        .setAlgorithm(algorithm)
-        .setUserAuthenticationRequired(
-            required = userAuthenticationRequired,
-            timeoutMillis = timeoutMillis,
-            userAuthenticationTypes = setOf(UserAuthenticationType.LSKF, UserAuthenticationType.BIOMETRIC)
-        )
-        .setValidityPeriod(validFrom, validUntil)
-        .build()
-}
-
 // https://stackoverflow.com/a/21505193/878126
 actual val platformIsEmulator: Boolean by lazy {
     // Android SDK emulator
@@ -155,4 +111,24 @@ actual val platformIsEmulator: Boolean by lazy {
             || Build.PRODUCT == "google_sdk")
     // another Android SDK emulator check
     /* || SystemProperties.getProp("ro.kernel.qemu") == "1") */
+}
+
+@Suppress("DEPRECATION")
+actual fun getAppToAppOrigin(): String {
+    val packageInfo = applicationContext.packageManager
+        .getPackageInfo(applicationContext.packageName, PackageManager.GET_SIGNATURES)
+    return getAppOrigin(packageInfo.signatures!![0].toByteArray())
+}
+
+actual suspend fun getExternalNfcTagReaders(): List<NfcTagReader> {
+    val externalNfcReader = nfcTagReaderUsbCheck()
+    if (externalNfcReader == null) {
+        return emptyList()
+    }
+    Toast.makeText(
+        applicationContext,
+        "Using USB-connected NFC reader ${externalNfcReader.readerName}",
+        Toast.LENGTH_LONG
+    ).show()
+    return listOf(externalNfcReader)
 }

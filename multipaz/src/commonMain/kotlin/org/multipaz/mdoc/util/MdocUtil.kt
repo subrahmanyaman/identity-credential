@@ -25,7 +25,6 @@ import org.multipaz.asn1.ASN1TaggedObject
 import org.multipaz.asn1.OID
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
-import org.multipaz.cbor.CborMap
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tagged
@@ -48,8 +47,9 @@ import org.multipaz.request.MdocRequest
 import org.multipaz.request.MdocRequestedClaim
 import org.multipaz.request.Requester
 import org.multipaz.util.Logger
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import org.multipaz.cbor.buildCborMap
+import org.multipaz.crypto.X509Extension
 import kotlin.random.Random
 
 /**
@@ -377,8 +377,8 @@ object MdocUtil {
     /**
      * Helper function to generate a [DocumentRequest].
      *
-     * @param documentRequest a [org.multipaz.mdoc.request.DeviceRequestParser.DocRequest].
-     * @return a [DocumentRequest] representing for the given [org.multipaz.mdoc.request.DeviceRequestParser.DocRequest].
+     * @param documentRequest a [DeviceRequestParser.DocRequest].
+     * @return a [DocumentRequest] representing for the given [DeviceRequestParser.DocRequest].
      */
     fun generateDocumentRequest(
         documentRequest: DeviceRequestParser.DocRequest
@@ -618,6 +618,7 @@ object MdocUtil {
      * @param serial the serial number to use for the certificate.
      * @param validFrom the point in time the certificate should be valid from.
      * @param validUntil the point in time the certificate should be valid until.
+     * @param extensions additional extensions to include in the reader certificate.
      * @return a [X509Cert] with all the required extensions.
      */
     fun generateReaderCertificate(
@@ -628,8 +629,9 @@ object MdocUtil {
         serial: ASN1Integer,
         validFrom: Instant,
         validUntil: Instant,
+        extensions: List<X509Extension> = emptyList()
     ): X509Cert {
-        return X509Cert.Builder(
+        val builder = X509Cert.Builder(
             publicKey = readerKey,
             signingKey = readerRootKey,
             signatureAlgorithm = readerRootKey.curve.defaultSigningAlgorithm,
@@ -654,7 +656,14 @@ object MdocUtil {
                 false,
                 readerRootCert.getExtensionValue(OID.X509_EXTENSION_CRL_DISTRIBUTION_POINTS.oid)!!
             )
-            .build()
+        for (extension in extensions) {
+            builder.addExtension(
+                oid = extension.oid,
+                critical = extension.isCritical,
+                value = extension.data.toByteArray()
+            )
+        }
+        return builder.build()
     }
 
     /**
@@ -673,20 +682,11 @@ object MdocUtil {
         documentTypeRepository: DocumentTypeRepository,
         mdocCredential: MdocCredential?,
     ): List<MdocRequestedClaim> {
-        val mdocDocumentType = documentTypeRepository.getDocumentTypeForMdoc(docType)?.mdocDocumentType
         val ret = mutableListOf<MdocRequestedClaim>()
         for ((namespaceName, listOfDe) in requestedData) {
             for ((dataElementName, intentToRetain) in listOfDe) {
-                val attribute =
-                    mdocDocumentType?.namespaces
-                        ?.get(namespaceName)
-                        ?.dataElements
-                        ?.get(dataElementName)
-                        ?.attribute
                 ret.add(
                     MdocRequestedClaim(
-                        displayName = attribute?.displayName ?: dataElementName,
-                        attribute = attribute,
                         namespaceName = namespaceName,
                         dataElementName = dataElementName,
                         intentToRetain = intentToRetain,
@@ -699,19 +699,65 @@ object MdocUtil {
 }
 
 /**
+ * Parses a version string used in ISO mdoc data structures into major and minor versions.
+ *
+ * @return the major and minor version
+ * @throws IllegalArgumentException if unable to parse the string.
+ */
+fun String.parseMdocVersion(): Pair<Int, Int> {
+    val splits = this.split(".")
+    require(splits.size == 2) { "Expected version string '$this' to only have two components" }
+    val major = try {
+        splits[0].toInt()
+    } catch (e: NumberFormatException) {
+        throw IllegalArgumentException("Expected first component of '$this' to be an integer", e)
+    }
+    val minor = try {
+        splits[1].toInt()
+    } catch (e: NumberFormatException) {
+        throw IllegalArgumentException("Expected second component of '$this' to be an integer", e)
+    }
+    return Pair(major, minor)
+}
+
+/**
+ * Compares two ISO mdoc versions.
+ *
+ * @param otherVersion the other ISO mdoc version.
+ * @return positive number if greater than [otherVersion], negative number of [otherVersion] is greater, 0 if the
+ *   versions are equal.
+ * @throws IllegalArgumentException if unable to parse the string.
+ */
+fun String.mdocVersionCompareTo(otherVersion: String): Int {
+    val (major, minor) = this.parseMdocVersion()
+    val (otherMajor, otherMinor) = otherVersion.parseMdocVersion()
+    if (major > otherMajor) {
+        return 1
+    } else if (major < otherMajor) {
+        return -1
+    }
+    if (minor > otherMinor) {
+        return 1
+    } else if (minor < otherMinor) {
+        return -1
+    }
+    return 0
+}
+
+/**
  * Convert to a [MdocRequest].
  *
  * @param documentTypeRepository a [DocumentTypeRepository] used to determine the display name for claims.
  * @param mdocCredential if set, the returned list is filtered so it only references data
  *     elements available in the credential.
  * @param requesterAppId the appId if an app is making the request or `null`.
- * @param requesterWebsiteOrigin the website origin if a website is making the request or `null`.
+ * @param requesterOrigin the origin or `null`.
  */
 fun DeviceRequestParser.DocRequest.toMdocRequest(
     documentTypeRepository: DocumentTypeRepository,
     mdocCredential: MdocCredential?,
     requesterAppId: String? = null,
-    requesterWebsiteOrigin: String? = null,
+    requesterOrigin: String? = null,
 ): MdocRequest {
     val requestedData = mutableMapOf<String, MutableList<Pair<String, Boolean>>>()
     for (namespaceName in namespaces) {
@@ -729,7 +775,7 @@ fun DeviceRequestParser.DocRequest.toMdocRequest(
                 null
             },
             appId = requesterAppId,
-            websiteOrigin = requesterWebsiteOrigin
+            origin = requesterOrigin
         ),
         requestedClaims = MdocUtil.generateRequestedClaims(
             docType,

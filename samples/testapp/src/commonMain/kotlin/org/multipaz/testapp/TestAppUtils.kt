@@ -1,11 +1,31 @@
 package org.multipaz.testapp
 
+import kotlinx.io.bytestring.ByteString
+import kotlinx.io.bytestring.encodeToByteString
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import multipazproject.samples.testapp.generated.resources.Res
+import multipazproject.samples.testapp.generated.resources.av18_card_art
+import multipazproject.samples.testapp.generated.resources.card_utopia_wholesale
+import multipazproject.samples.testapp.generated.resources.driving_license_card_art
+import multipazproject.samples.testapp.generated.resources.movie_ticket_cart_art
+import multipazproject.samples.testapp.generated.resources.photo_id_card_art
+import multipazproject.samples.testapp.generated.resources.pid_card_art
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.ExperimentalResourceApi
+import org.jetbrains.compose.resources.getDrawableResourceBytes
+import org.jetbrains.compose.resources.getSystemResourceEnvironment
 import org.multipaz.cbor.Bstr
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.DataItem
 import org.multipaz.cbor.RawCbor
 import org.multipaz.cbor.Tagged
 import org.multipaz.cbor.Tstr
+import org.multipaz.cbor.buildCborArray
+import org.multipaz.cbor.buildCborMap
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cose.Cose
 import org.multipaz.cose.CoseLabel
@@ -20,6 +40,8 @@ import org.multipaz.document.Document
 import org.multipaz.document.DocumentStore
 import org.multipaz.documenttype.DocumentCannedRequest
 import org.multipaz.documenttype.DocumentType
+import org.multipaz.documenttype.knowntypes.AgeVerification
+import org.multipaz.documenttype.knowntypes.Loyalty
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.documenttype.knowntypes.EUPersonalID
 import org.multipaz.documenttype.knowntypes.PhotoID
@@ -27,39 +49,22 @@ import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
 import org.multipaz.mdoc.credential.MdocCredential
 import org.multipaz.mdoc.issuersigned.buildIssuerNamespaces
 import org.multipaz.mdoc.mso.MobileSecurityObjectGenerator
-import org.multipaz.mdoc.request.DeviceRequestGenerator
+import org.multipaz.mdoc.request.DocRequestInfo
+import org.multipaz.mdoc.request.ZkRequest
+import org.multipaz.mdoc.request.buildDeviceRequest
+import org.multipaz.mdoc.zkp.ZkSystemRepository
+import org.multipaz.sdjwt.SdJwt
 import org.multipaz.sdjwt.credential.KeyBoundSdJwtVcCredential
 import org.multipaz.sdjwt.credential.KeylessSdJwtVcCredential
 import org.multipaz.securearea.CreateKeySettings
 import org.multipaz.securearea.SecureArea
+import org.multipaz.testapp.ui.DocumentCreationMode
 import org.multipaz.util.Logger
-import multipazproject.samples.testapp.generated.resources.Res
-import multipazproject.samples.testapp.generated.resources.driving_license_card_art
-import multipazproject.samples.testapp.generated.resources.movie_ticket_cart_art
-import multipazproject.samples.testapp.generated.resources.photo_id_card_art
-import multipazproject.samples.testapp.generated.resources.pid_card_art
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.io.bytestring.ByteString
-import kotlinx.io.bytestring.encodeToByteString
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import org.jetbrains.compose.resources.DrawableResource
-import org.jetbrains.compose.resources.ExperimentalResourceApi
-import org.jetbrains.compose.resources.getDrawableResourceBytes
-import org.jetbrains.compose.resources.getSystemResourceEnvironment
-import org.multipaz.cbor.buildCborArray
-import org.multipaz.cbor.buildCborMap
-import org.multipaz.mdoc.zkp.ZkSystemRepository
-import org.multipaz.mdoc.zkp.ZkSystemSpec
-import org.multipaz.sdjwt.SdJwt
-import org.multipaz.testapp.ui.CsaCreationMode
-import kotlin.collections.component1
-import kotlin.collections.component2
-import kotlin.collections.iterator
+import org.multipaz.util.truncateToWholeSeconds
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Instant
 
 object TestAppUtils {
     private const val TAG = "TestAppUtils"
@@ -85,7 +90,7 @@ object TestAppUtils {
     // This domain is for KeylessSdJwtVcCredential
     const val CREDENTIAL_DOMAIN_SDJWT_KEYLESS = "sdjwt_keyless"
 
-    fun generateEncodedDeviceRequest(
+    suspend fun generateEncodedDeviceRequest(
         request: DocumentCannedRequest,
         encodedSessionTranscript: ByteArray,
         readerKey: EcPrivateKey,
@@ -102,26 +107,32 @@ object TestAppUtils {
             }
         }
 
-        val zkSystemSpecs = if (mdocRequest.useZkp) {
+        val zkRequest = if (mdocRequest.useZkp) {
             if (zkSystemRepository == null){
                 throw IllegalStateException("zkSystemRepository is null")
             }
-            zkSystemRepository.getAllZkSystemSpecs()
+            ZkRequest(
+                systemSpecs = zkSystemRepository.getAllZkSystemSpecs(),
+                zkRequired = false
+            )
         } else {
-            emptyList()
+            null
         }
 
-        val deviceRequestGenerator = DeviceRequestGenerator(encodedSessionTranscript)
-        deviceRequestGenerator.addDocumentRequest(
-            docType = mdocRequest.docType,
-            itemsToRequest = itemsToRequest,
-            requestInfo = null,
-            readerKey = readerKey,
-            signatureAlgorithm = readerKey.curve.defaultSigningAlgorithm,
-            readerKeyCertificateChain = X509CertChain(listOf(readerCert, readerRootCert)),
-            zkSystemSpecs = zkSystemSpecs
-        )
-        return deviceRequestGenerator.generate()
+        return Cbor.encode(buildDeviceRequest(
+            sessionTranscript = RawCbor(encodedSessionTranscript)
+        ) {
+            addDocRequest(
+                docType = mdocRequest.docType,
+                nameSpaces = itemsToRequest,
+                docRequestInfo = DocRequestInfo(
+                    zkRequest = zkRequest
+                ),
+                readerKey = readerKey,
+                signatureAlgorithm = readerKey.curve.defaultSigningAlgorithm,
+                readerKeyCertificateChain = X509CertChain(listOf(readerCert, readerRootCert)),
+            )
+        }.toDataItem())
     }
 
     fun generateEncodedSessionTranscript(
@@ -144,11 +155,13 @@ object TestAppUtils {
         DrivingLicense.getDocumentType(),
         PhotoID.getDocumentType(),
         EUPersonalID.getDocumentType(),
-        UtopiaMovieTicket.getDocumentType()
+        UtopiaMovieTicket.getDocumentType(),
+        AgeVerification.getDocumentType(),
+        Loyalty.getDocumentType(),
     )
 
     suspend fun provisionTestDocuments(
-        csaCreationMode: CsaCreationMode,
+        documentCreationMode: DocumentCreationMode,
         documentStore: DocumentStore,
         secureArea: SecureArea,
         secureAreaCreateKeySettingsFunc: (
@@ -166,94 +179,368 @@ object TestAppUtils {
     ): String? {
         require(deviceKeyAlgorithm.isSigning)
         require(deviceKeyMacAlgorithm == Algorithm.UNSET || deviceKeyMacAlgorithm.isKeyAgreement)
-        if (csaCreationMode == CsaCreationMode.EUPID_WITH_10_CREDENTIALS ||
-            csaCreationMode == CsaCreationMode.EUPID_WITH_10_CREDENTIALS_BATCH) {
-            return provisionCsaEuPid(
-                csaCreationMode == CsaCreationMode.EUPID_WITH_10_CREDENTIALS_BATCH,
-                documentStore,
-                secureArea,
-                secureAreaCreateKeySettingsFunc,
-                dsKey,
-                dsCert,
-                deviceKeyAlgorithm,
-                deviceKeyMacAlgorithm,
-                EUPersonalID.getDocumentType(),
-                "Erika",
-                "Erika's EU PID in CSA",
-                Res.drawable.pid_card_art
+        when (documentCreationMode) {
+            DocumentCreationMode.EUPID_WITH_10_CREDENTIALS,
+            DocumentCreationMode.EUPID_WITH_10_CREDENTIALS_BATCH -> {
+                return provisionCsaEuPid(
+                    documentCreationMode == DocumentCreationMode.EUPID_WITH_10_CREDENTIALS_BATCH,
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    dsCert,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    EUPersonalID.getDocumentType(),
+                    "Erika",
+                    "Erika's EU PID in CSA",
+                    Res.drawable.pid_card_art
+                )
+            }
+            DocumentCreationMode.DCQL_TEST_DOCUMENTS -> {
+                dcqlTestProvisionSdJwtVc(
+                    displayName = "Erika's PID",
+                    typeDisplayName = "Freedonia PID",
+                    cardArtResource = Res.drawable.pid_card_art,
+                    vct = "https://credentials.example.com/identity_credential",
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                        "family_name" to JsonPrimitive("Mustermann"),
+                        "address" to buildJsonObject {
+                            put("street_address", JsonPrimitive("Sample Street 123"))
+                        }
+                    ),
+                    documentStore = documentStore,
+                    secureArea = secureArea,
+                    secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
+                    dsKey = dsKey,
+                    dsCert = dsCert
+                )
+                dcqlTestProvisionSdJwtVc(
+                    displayName = "Max's PID",
+                    typeDisplayName = "Freedonia PID",
+                    cardArtResource = Res.drawable.pid_card_art,
+                    vct = "https://credentials.example.com/identity_credential",
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Max"),
+                        "family_name" to JsonPrimitive("Mustermann"),
+                        "address" to buildJsonObject {
+                            put("street_address", JsonPrimitive("Sample Street 456"))
+                        }
+                    ),
+                    documentStore = documentStore,
+                    secureArea = secureArea,
+                    secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
+                    dsKey = dsKey,
+                    dsCert = dsCert
+                )
+                dcqlTestProvisionSdJwtVc(
+                    displayName = "Erika's PID",
+                    typeDisplayName = "Elbonia PID",
+                    cardArtResource = Res.drawable.photo_id_card_art,
+                    vct = "https://othercredentials.example/pid",
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                        "family_name" to JsonPrimitive("Mustermann"),
+                        "address" to buildJsonObject {
+                            put("street_address", JsonPrimitive("Sample Street 123"))
+                        }
+                    ),
+                    documentStore = documentStore,
+                    secureArea = secureArea,
+                    secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
+                    dsKey = dsKey,
+                    dsCert = dsCert
+                )
+                dcqlTestProvisionSdJwtVc(
+                    displayName = "Erika's ID Card",
+                    typeDisplayName = "Gotham City ID Card",
+                    cardArtResource = Res.drawable.driving_license_card_art,
+                    vct = "https://credentials.example.com/reduced_identity_credential",
+                    data = listOf(
+                        "given_name" to JsonPrimitive("Erika"),
+                        "family_name" to JsonPrimitive("Mustermann"),
+                    ),
+                    documentStore = documentStore,
+                    secureArea = secureArea,
+                    secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
+                    dsKey = dsKey,
+                    dsCert = dsCert
+                )
+                dcqlTestProvisionSdJwtVc(
+                    displayName = "Erika's Residence Card",
+                    typeDisplayName = "Gotham City Residence Card",
+                    cardArtResource = Res.drawable.driving_license_card_art,
+                    vct = "https://cred.example/residence_credential",
+                    data = listOf(
+                        "postal_code" to JsonPrimitive(90210),
+                        "locality" to JsonPrimitive("Beverly Hills"),
+                        "region" to JsonPrimitive("Los Angeles Basin"),
+                    ),
+                    documentStore = documentStore,
+                    secureArea = secureArea,
+                    secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
+                    dsKey = dsKey,
+                    dsCert = dsCert
+                )
+                dcqlTestProvisionSdJwtVc(
+                    displayName = "Erika's Reward Card",
+                    typeDisplayName = "Earl's Market Sav4You",
+                    cardArtResource = Res.drawable.movie_ticket_cart_art,
+                    vct = "https://company.example/company_rewards",
+                    data = listOf(
+                        "rewards_number" to JsonPrimitive(24601),
+                    ),
+                    documentStore = documentStore,
+                    secureArea = secureArea,
+                    secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
+                    dsKey = dsKey,
+                    dsCert = dsCert
+                )
+                return null
+            }
+            DocumentCreationMode.NORMAL -> {
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    dsCert,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    DrivingLicense.getDocumentType(),
+                    "Erika",
+                    "Erika's Driving License",
+                    Res.drawable.driving_license_card_art
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    dsCert,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    PhotoID.getDocumentType(),
+                    "Erika",
+                    "Erika's Photo ID",
+                    Res.drawable.photo_id_card_art
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    dsCert,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    PhotoID.getDocumentType(),
+                    "Erika #2",
+                    "Erika's Photo ID #2",
+                    Res.drawable.photo_id_card_art
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    dsCert,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    EUPersonalID.getDocumentType(),
+                    "Erika",
+                    "Erika's EU PID",
+                    Res.drawable.pid_card_art
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    dsCert,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    UtopiaMovieTicket.getDocumentType(),
+                    "Erika",
+                    "The Last Utopian",
+                    Res.drawable.movie_ticket_cart_art
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    dsCert,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    UtopiaMovieTicket.getDocumentType(),
+                    "Erika",
+                    "One flew over the Utopian Nest",
+                    Res.drawable.movie_ticket_cart_art
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    dsCert,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    UtopiaMovieTicket.getDocumentType(),
+                    "Erika",
+                    "Utopia! Utopia! Utopia!",
+                    Res.drawable.movie_ticket_cart_art
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    dsCert,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    AgeVerification.getDocumentType(),
+                    "Erika",
+                    "Erika's Age Verification Credential",
+                    Res.drawable.av18_card_art
+                )
+                provisionDocument(
+                    documentStore,
+                    secureArea,
+                    secureAreaCreateKeySettingsFunc,
+                    dsKey,
+                    dsCert,
+                    deviceKeyAlgorithm,
+                    deviceKeyMacAlgorithm,
+                    numCredentialsPerDomain,
+                    Loyalty.getDocumentType(),
+                    "Erika",
+                    "Erika's Loyalty ID",
+                    Res.drawable.card_utopia_wholesale
+                )
+                return null
+            }
+        }
+    }
+
+    private suspend fun dcqlTestProvisionSdJwtVc(
+        displayName: String,
+        typeDisplayName: String,
+        cardArtResource: DrawableResource,
+        vct: String,
+        data: List<Pair<String, JsonElement>>,
+        documentStore: DocumentStore,
+        secureArea: SecureArea,
+        secureAreaCreateKeySettingsFunc: (
+            challenge: ByteString,
+            algorithm: Algorithm,
+            userAuthenticationRequired: Boolean,
+            validFrom: Instant,
+            validUntil: Instant
+        ) -> CreateKeySettings,
+        dsKey: EcPrivateKey,
+        dsCert: X509Cert
+    ): Document {
+        val cardArt = getDrawableResourceBytes(
+            getSystemResourceEnvironment(),
+            cardArtResource,
+        )
+
+        val now = Clock.System.now()
+        val signedAt = now - 1.hours
+        val validFrom =  now - 1.hours
+        val validUntil = now + 365.days
+        val document = documentStore.createDocument(
+            displayName = displayName,
+            typeDisplayName = typeDisplayName,
+            cardArt = ByteString(cardArt)
+        )
+        val identityAttributes = buildJsonObject {
+            for ((claimName, claimValue) in data) {
+                put(claimName, claimValue)
+            }
+        }
+        addSdJwtVcCredentialWithData(
+            document = document,
+            vct = vct,
+            identityAttributes = identityAttributes,
+            signedAt = signedAt,
+            validFrom = validFrom,
+            validUntil = validUntil,
+            secureArea = secureArea,
+            secureAreaCreateKeySettingsFunc = secureAreaCreateKeySettingsFunc,
+            dsKey = dsKey,
+            dsCert = dsCert
+        )
+        return document
+    }
+
+    private suspend fun addSdJwtVcCredentialWithData(
+        document: Document,
+        vct: String,
+        identityAttributes: JsonObject,
+        signedAt: Instant,
+        validFrom: Instant,
+        validUntil: Instant,
+        secureArea: SecureArea,
+        secureAreaCreateKeySettingsFunc: (
+            challenge: ByteString,
+            algorithm: Algorithm,
+            userAuthenticationRequired: Boolean,
+            validFrom: Instant,
+            validUntil: Instant
+        ) -> CreateKeySettings,
+        dsKey: EcPrivateKey,
+        dsCert: X509Cert,
+    ) {
+        for (domain in listOf(CREDENTIAL_DOMAIN_SDJWT_NO_USER_AUTH, CREDENTIAL_DOMAIN_SDJWT_USER_AUTH)) {
+            val credential = KeyBoundSdJwtVcCredential.create(
+                document = document,
+                asReplacementForIdentifier = null,
+                domain = domain,
+                secureArea = secureArea,
+                vct = vct,
+                createKeySettings = secureAreaCreateKeySettingsFunc(
+                    ByteString(),
+                    Algorithm.ESP256,
+                    if (domain == CREDENTIAL_DOMAIN_SDJWT_USER_AUTH) true else false,
+                    validFrom,
+                    validUntil,
+                )
+            )
+
+            val sdJwt = SdJwt.create(
+                issuerKey = dsKey,
+                issuerAlgorithm = dsKey.curve.defaultSigningAlgorithmFullySpecified,
+                issuerCertChain = X509CertChain(listOf(dsCert)),
+                kbKey = (credential as? SecureAreaBoundCredential)?.let {
+                    it.secureArea.getKeyInfo(
+                        it.alias
+                    ).publicKey
+                },
+                claims = identityAttributes,
+                nonSdClaims = buildJsonObject {
+                    put("iss", "https://example-issuer.com")
+                    put("vct", credential.vct)
+                    put("iat", signedAt.epochSeconds)
+                    put("nbf", validFrom.epochSeconds)
+                    put("exp", validUntil.epochSeconds)
+                },
+            )
+            credential.certify(
+                sdJwt.compactSerialization.encodeToByteArray(),
+                validFrom,
+                validUntil
             )
         }
-        provisionDocument(
-            documentStore,
-            secureArea,
-            secureAreaCreateKeySettingsFunc,
-            dsKey,
-            dsCert,
-            deviceKeyAlgorithm,
-            deviceKeyMacAlgorithm,
-            numCredentialsPerDomain,
-            DrivingLicense.getDocumentType(),
-            "Erika",
-            "Erika's Driving License",
-            Res.drawable.driving_license_card_art
-        )
-        provisionDocument(
-            documentStore,
-            secureArea,
-            secureAreaCreateKeySettingsFunc,
-            dsKey,
-            dsCert,
-            deviceKeyAlgorithm,
-            deviceKeyMacAlgorithm,
-            numCredentialsPerDomain,
-            PhotoID.getDocumentType(),
-            "Erika",
-            "Erika's Photo ID",
-            Res.drawable.photo_id_card_art
-        )
-        provisionDocument(
-            documentStore,
-            secureArea,
-            secureAreaCreateKeySettingsFunc,
-            dsKey,
-            dsCert,
-            deviceKeyAlgorithm,
-            deviceKeyMacAlgorithm,
-            numCredentialsPerDomain,
-            PhotoID.getDocumentType(),
-            "Erika #2",
-            "Erika's Photo ID #2",
-            Res.drawable.photo_id_card_art
-        )
-        provisionDocument(
-            documentStore,
-            secureArea,
-            secureAreaCreateKeySettingsFunc,
-            dsKey,
-            dsCert,
-            deviceKeyAlgorithm,
-            deviceKeyMacAlgorithm,
-            numCredentialsPerDomain,
-            EUPersonalID.getDocumentType(),
-            "Erika",
-            "Erika's EU PID",
-            Res.drawable.pid_card_art
-        )
-        provisionDocument(
-            documentStore,
-            secureArea,
-            secureAreaCreateKeySettingsFunc,
-            dsKey,
-            dsCert,
-            deviceKeyAlgorithm,
-            deviceKeyMacAlgorithm,
-            numCredentialsPerDomain,
-            UtopiaMovieTicket.getDocumentType(),
-            "Erika",
-            "Erika's Movie Ticket",
-            Res.drawable.movie_ticket_cart_art
-        )
-        return null
     }
 
     @OptIn(ExperimentalResourceApi::class)
@@ -343,7 +630,7 @@ object TestAppUtils {
             cardArt = ByteString(cardArt),
         )
 
-        val now = Clock.System.now()
+        val now = Clock.System.now().truncateToWholeSeconds()
         val signedAt = now - 1.hours
         val validFrom =  now - 1.hours
         val validUntil = now + 365.days
@@ -553,8 +840,6 @@ object TestAppUtils {
                                 sampleValue
                             }
                             addDataElement(deName, value)
-                        } else {
-                            Logger.w(TAG, "No sample value for data element $deName")
                         }
                     }
                 }
@@ -699,8 +984,6 @@ object TestAppUtils {
                         sampleValue
                     }
                     put(claimName, value)
-                } else {
-                    Logger.w(TAG, "No sample value for claim $claimName")
                 }
             }
         }

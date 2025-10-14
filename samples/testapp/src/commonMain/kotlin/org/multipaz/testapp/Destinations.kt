@@ -5,12 +5,10 @@ import androidx.navigation.navArgument
 import multipazproject.samples.testapp.generated.resources.Res
 import multipazproject.samples.testapp.generated.resources.about_screen_title
 import multipazproject.samples.testapp.generated.resources.android_keystore_secure_area_screen_title
-import multipazproject.samples.testapp.generated.resources.barcode_scanning_title
-import multipazproject.samples.testapp.generated.resources.camera_title
+import multipazproject.samples.testapp.generated.resources.dc_request_title
 import multipazproject.samples.testapp.generated.resources.certificate_viewer_examples_title
 import multipazproject.samples.testapp.generated.resources.cloud_secure_area_screen_title
-import multipazproject.samples.testapp.generated.resources.consent_modal_bottom_sheet_list_screen_title
-import multipazproject.samples.testapp.generated.resources.consent_modal_bottom_sheet_screen_title
+import multipazproject.samples.testapp.generated.resources.consent_prompt_screen_title
 import multipazproject.samples.testapp.generated.resources.iso_mdoc_multi_device_testing_title
 import multipazproject.samples.testapp.generated.resources.iso_mdoc_proximity_reading_title
 import multipazproject.samples.testapp.generated.resources.iso_mdoc_proximity_sharing_title
@@ -18,7 +16,6 @@ import multipazproject.samples.testapp.generated.resources.provisioning_test_tit
 import multipazproject.samples.testapp.generated.resources.passphrase_entry_field_screen_title
 import multipazproject.samples.testapp.generated.resources.qr_codes_screen_title
 import multipazproject.samples.testapp.generated.resources.nfc_screen_title
-import multipazproject.samples.testapp.generated.resources.presentment_title
 import multipazproject.samples.testapp.generated.resources.secure_enclave_secure_area_screen_title
 import multipazproject.samples.testapp.generated.resources.software_secure_area_screen_title
 import multipazproject.samples.testapp.generated.resources.certificate_viewer_title
@@ -27,12 +24,11 @@ import multipazproject.samples.testapp.generated.resources.credential_viewer_tit
 import multipazproject.samples.testapp.generated.resources.document_store_screen_title
 import multipazproject.samples.testapp.generated.resources.notifications_title
 import multipazproject.samples.testapp.generated.resources.document_viewer_title
-import multipazproject.samples.testapp.generated.resources.face_detection_title
 import multipazproject.samples.testapp.generated.resources.passphrase_prompt_screen_title
 import multipazproject.samples.testapp.generated.resources.rich_text_title
 import multipazproject.samples.testapp.generated.resources.screen_lock_title
-import multipazproject.samples.testapp.generated.resources.selfie_check_title
 import multipazproject.samples.testapp.generated.resources.settings_screen_title
+import multipazproject.samples.testapp.generated.resources.show_response_title
 import multipazproject.samples.testapp.generated.resources.trust_point_viewer_screen_title
 import multipazproject.samples.testapp.generated.resources.trusted_issuers_screen_title
 import multipazproject.samples.testapp.generated.resources.trusted_verifiers_screen_title
@@ -154,21 +150,9 @@ data object ProvisioningTestDestination : Destination {
     override val title = Res.string.provisioning_test_title
 }
 
-data object ConsentModalBottomSheetListDestination : Destination {
-    override val route = "consent_modal_bottom_sheet_list"
-    override val title = Res.string.consent_modal_bottom_sheet_list_screen_title
-}
-
-data object ConsentModalBottomSheetDestination : Destination {
-    override val route = "consent_modal_bottom_sheet"
-    override val title = Res.string.consent_modal_bottom_sheet_screen_title
-    const val mdlSampleRequestArg = "mdl_sample_request_arg"
-    const val verifierTypeArg = "verifier_type"
-    val routeWithArgs = "$route/{$mdlSampleRequestArg}/{$verifierTypeArg}"
-    val arguments = listOf(
-        navArgument(mdlSampleRequestArg) { type = NavType.StringType },
-        navArgument(verifierTypeArg) { type = NavType.StringType },
-    )
+data object ConsentPromptDestination : Destination {
+    override val route = "consent_prompt"
+    override val title = Res.string.consent_prompt_screen_title
 }
 
 data object QrCodesDestination : Destination {
@@ -191,14 +175,34 @@ data object IsoMdocProximityReadingDestination : Destination {
     override val title = Res.string.iso_mdoc_proximity_reading_title
 }
 
+data object DcRequestDestination : Destination {
+    override val route = "dc_request"
+    override val title = Res.string.dc_request_title
+}
+
+data object ShowResponseDestination : Destination {
+    override val route = "show_response"
+    override val title = Res.string.show_response_title
+    const val VP_TOKEN = "vp_token_arg"
+    const val DEVICE_RESPONSE = "device_response_arg"
+    const val SESSION_TRANSCRIPT = "session_transcript_arg"
+    const val NONCE = "nonce_arg"
+    const val EREADERKEY = "ereaderkey_arg"
+    const val METADATA = "metadata_arg"
+    val routeWithArgs = "$route/{$VP_TOKEN}/{$DEVICE_RESPONSE}/{$SESSION_TRANSCRIPT}/{$NONCE}/{$EREADERKEY}/{$METADATA}"
+    val arguments = listOf(
+        navArgument(VP_TOKEN) { type = NavType.StringType },
+        navArgument(DEVICE_RESPONSE) { type = NavType.StringType },
+        navArgument(SESSION_TRANSCRIPT) { type = NavType.StringType },
+        navArgument(NONCE) { type = NavType.StringType },
+        navArgument(EREADERKEY) { type = NavType.StringType },
+        navArgument(METADATA) { type = NavType.StringType },
+    )
+}
+
 data object IsoMdocMultiDeviceTestingDestination : Destination {
     override val route = "iso_mdoc_multi_device_testing"
     override val title = Res.string.iso_mdoc_multi_device_testing_title
-}
-
-data object PresentmentDestination : Destination {
-    override val route = "presentment"
-    override val title = Res.string.presentment_title
 }
 
 data object CertificatesViewerExamplesDestination : Destination {
@@ -231,26 +235,6 @@ data object ScreenLockDestination : Destination {
     override val title = Res.string.screen_lock_title
 }
 
-data object CameraDestination : Destination {
-    override val route = "camera"
-    override val title = Res.string.camera_title
-}
-
-data object FaceDetectionDestination : Destination {
-    override val route = "face_detection"
-    override val title = Res.string.face_detection_title
-}
-
-data object BarcodeScanningDestination : Destination {
-    override val route = "BarcodeScanning"
-    override val title = Res.string.barcode_scanning_title
-}
-
-data object SelfieCheckScreenDestination : Destination {
-    override val route = "SelfieCheck"
-    override val title = Res.string.selfie_check_title
-}
-
 val appDestinations = listOf(
     StartDestination,
     SettingsDestination,
@@ -269,21 +253,17 @@ val appDestinations = listOf(
     PassphraseEntryFieldDestination,
     PassphrasePromptDestination,
     ProvisioningTestDestination,
-    ConsentModalBottomSheetListDestination,
-    ConsentModalBottomSheetDestination,
+    ConsentPromptDestination,
     QrCodesDestination,
     NfcDestination,
     IsoMdocProximitySharingDestination,
     IsoMdocProximityReadingDestination,
+    DcRequestDestination,
+    ShowResponseDestination,
     IsoMdocMultiDeviceTestingDestination,
-    PresentmentDestination,
     CertificatesViewerExamplesDestination,
     CertificateViewerDestination,
     RichTextDestination,
     NotificationsDestination,
     ScreenLockDestination,
-    CameraDestination,
-    FaceDetectionDestination,
-    BarcodeScanningDestination,
-    SelfieCheckScreenDestination
 )

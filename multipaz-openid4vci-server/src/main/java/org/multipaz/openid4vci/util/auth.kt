@@ -7,11 +7,13 @@ import io.ktor.http.protocolWithAuthority
 import io.ktor.server.request.ApplicationRequest
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.uri
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.io.bytestring.ByteString
 import kotlinx.io.bytestring.ByteStringBuilder
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.multipaz.cbor.Cbor
@@ -21,15 +23,17 @@ import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.openid4vci.credential.CredentialFactory
 import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.rpc.backend.Configuration
 import org.multipaz.rpc.handler.InvalidRequestException
 import org.multipaz.rpc.handler.SimpleCipher
 import org.multipaz.server.getBaseUrl
+import org.multipaz.jwt.JwtCheck
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
+import org.multipaz.jwt.validateJwt
 import kotlin.time.Duration
 
 const val OAUTH_REQUEST_URI_PREFIX = "urn:ietf:params:oauth:request_uri:"
+const val MULTIPAZ_PRE_AUTHORIZE_URI = "https://pre-authorize.multipaz.org/"
 const val OPENID4VP_REQUEST_URI_PREFIX = "https://rp.example.com/oidc/request/"
 
 val AUTHZ_REQ = ContentType("application", "oauth-authz-req+jwt")
@@ -49,7 +53,8 @@ enum class OpaqueIdType {
     OPENID4VP_CODE,  // send to /authorize when we want openid4vp request
     OPENID4VP_STATE,  // for state field in openid4vp
     OPENID4VP_PRESENTATION,  // for use in presentation_during_issuance_session
-    RECORDS_STATE  // oauth state to authorize with System of Record
+    RECORDS_STATE,  // oauth state to authorize with System of Record
+    PRE_AUTHORIZED,  // pre-authorized code
 }
 
 /**
@@ -151,7 +156,7 @@ suspend fun validateClientAttestation(
         jwtName = "Client Attestation",
         publicKey = null,
         checks = mapOf(
-            JwtCheck.TRUST to "client_attestation",  // where to find CA
+            JwtCheck.TRUST to "trusted_client_attestations",  // where to find CA
             JwtCheck.TYP to "oauth-client-attestation+jwt",
             JwtCheck.SUB to clientId
         )
@@ -175,7 +180,7 @@ suspend fun validateClientAttestationPoP(
     val baseUrl = BackendEnvironment.getBaseUrl()
     val serverUrl = Url(baseUrl).protocolWithAuthority
 
-    validateJwt(
+    val body = validateJwt(
         jwt = popJwt,
         jwtName = "Client attestation PoP",
         publicKey = attestationKey,
@@ -183,25 +188,35 @@ suspend fun validateClientAttestationPoP(
             JwtCheck.JTI to clientId,
             JwtCheck.TYP to "oauth-client-attestation-pop+jwt",
             JwtCheck.ISS to clientId,
-            JwtCheck.AUD to serverUrl,
         )
     )
+    val aud = body["aud"]?.jsonPrimitive?.content
+    if (aud == baseUrl) {
+        // Correct value?
+        return
+    }
+    if (aud == serverUrl) {
+        // Outdated, but acceptable value?
+        return
+    }
+    throw InvalidRequestException("Client attestation PoP: 'aud' is incorrect or missing")
 }
 
 /**
  * Creates issuance session based on the given HTTP request and returns a unique id for it.
  */
-suspend fun createSession(request: ApplicationRequest, parameters: Parameters): String {
+suspend fun createSession(
+    request: ApplicationRequest,
+    parameters: Parameters,
+    requireAuthentication: Boolean = true
+): String {
     // Read all parameters
     val clientId = parameters["client_id"]
         ?: throw InvalidRequestException("missing parameter 'client_id'")
+    val (scope, configurationId) = getScopeAndCredentialId(parameters)
     val attestationKey = validateClientAttestation(request, clientId)
     if (attestationKey != null) {
         validateClientAttestationPoP(request, clientId, attestationKey)
-    }
-    val scope = parameters["scope"] ?: ""
-    if (!CredentialFactory.supportedScopes.contains(scope)) {
-        throw InvalidRequestException("invalid parameter 'scope'")
     }
     if (parameters["response_type"] != "code") {
         throw InvalidRequestException("invalid parameter 'response_type'")
@@ -221,6 +236,9 @@ suspend fun createSession(request: ApplicationRequest, parameters: Parameters): 
         throw InvalidRequestException("invalid parameter 'code_challenge'")
     }
     val clientAuthenticated = attestationKey != null || validateClientAssertion(parameters, clientId)
+    if (!clientAuthenticated && requireAuthentication) {
+        throw InvalidRequestException("client is not authenticated")
+    }
 
     // Validate DPoP if any
     val dpopKey = processInitialDPoP(request)
@@ -237,8 +255,36 @@ suspend fun createSession(request: ApplicationRequest, parameters: Parameters): 
     // Create a session
     return IssuanceState.createIssuanceState(
         IssuanceState(clientId, scope, attestationKey,
-            dpopKey, redirectUri, codeChallenge, clientState)
+            dpopKey, redirectUri, codeChallenge, configurationId, clientState)
     )
+}
+
+suspend fun getScopeAndCredentialId(parameters: Parameters): Pair<String, String?> {
+    val authorizationDetails = parameters["authorization_details"]
+    val configurationId = authorizationDetails?.let {
+        val authDetails = Json.parseToJsonElement(authorizationDetails).jsonArray
+        if (authDetails.size != 1) {
+            throw InvalidRequestException("only single-element 'authorization_details' is supported")
+        }
+        val auth = authDetails[0].jsonObject
+        if (auth["type"]?.jsonPrimitive?.content != "openid_credential") {
+            throw InvalidRequestException("only 'authorization_details' of openid_credential type is supported")
+        }
+        auth["credential_configuration_id"]!!.jsonPrimitive.content
+    }
+    val scope = if (configurationId == null) {
+        parameters["scope"]
+            ?: throw InvalidRequestException("either 'scope' or 'authorization_details' must be given")
+    } else {
+        val factory = CredentialFactory.getRegisteredFactories().byOfferId[configurationId]
+            ?: throw InvalidRequestException("invalid 'credential_configuration_id' in 'authorization_details'")
+        factory.scope
+    }
+    val supportedScopes = CredentialFactory.getRegisteredFactories().supportedScopes
+    if (!supportedScopes.contains(scope)) {
+        throw InvalidRequestException("invalid parameter 'scope'")
+    }
+    return Pair(scope, configurationId)
 }
 
 /**
@@ -323,7 +369,7 @@ private suspend fun validateClientAssertionJwt(clientAssertionJwt: String, clien
         jwtName = "client_assertion",
         publicKey = null,
         checks = mapOf(
-            JwtCheck.TRUST to "client_assertion",  // where to find CA
+            JwtCheck.TRUST to "trusted_client_assertions",  // where to find CA
             JwtCheck.JTI to clientId,
             JwtCheck.SUB to clientId,
             JwtCheck.ISS to clientId,

@@ -1,25 +1,24 @@
 package org.multipaz.openid4vci.credential
 
-import org.multipaz.crypto.EcPrivateKey
+import kotlinx.serialization.json.JsonObject
 import org.multipaz.crypto.EcPublicKey
-import org.multipaz.crypto.X509Cert
 import org.multipaz.documenttype.knowntypes.UtopiaMovieTicket
-import org.multipaz.rpc.backend.BackendEnvironment
-import org.multipaz.rpc.backend.Resources
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.multipaz.cbor.DataItem
-import org.multipaz.crypto.X509CertChain
+import org.multipaz.cbor.buildCborMap
+import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.sdjwt.SdJwt
+import org.multipaz.server.getBaseUrl
 
-internal class CredentialFactoryUtopiaMovieTicket : CredentialFactory {
+internal class CredentialFactoryUtopiaMovieTicket : CredentialFactoryBase() {
     override val offerId: String
         get() = "utopia_movie_ticket"
 
     override val scope: String
-        get() = "utopia_movie_ticket_sd_jwt"
+        get() = "movie"
 
     override val format: Openid4VciFormat
         get() = FORMAT
@@ -34,9 +33,6 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactory {
     override val cryptographicBindingMethods: List<String>
         get() = listOf()  // keyless
 
-    override val credentialSigningAlgorithms: List<String>
-        get() = CredentialFactory.DEFAULT_CREDENTIAL_SIGNING_ALGORITHMS
-
     override val name: String
         get() = "Utopia Movie Ticket"
 
@@ -48,10 +44,13 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactory {
         authenticationKey: EcPublicKey?
     ): String {
         check(authenticationKey == null)
-        val identityAttributes = buildJsonObject {
-            put("ticket_number", "123456789")
-            put("seat_id", "G2")
+        val issuer = BackendEnvironment.getBaseUrl()
+
+        val records = data["records"]
+        if (!records.hasKey("movie")) {
+            throw IllegalArgumentException("No movie ticket for this person")
         }
+        val ticket = records["movie"].asMap.values.firstOrNull() ?: buildCborMap { }
 
         val now = Clock.System.now()
 
@@ -59,21 +58,14 @@ internal class CredentialFactoryUtopiaMovieTicket : CredentialFactory {
         val validFrom = Instant.parse("2024-04-01T12:00:00Z")
         val validUntil = Instant.parse("2034-04-01T12:00:00Z")
 
-        val resources = BackendEnvironment.getInterface(Resources::class)!!
-        val documentSigningKeyCert =
-            X509Cert.fromPem(resources.getStringResource("ds_certificate.pem")!!)
-        val documentSigningKey = EcPrivateKey.fromPem(
-            resources.getStringResource("ds_private_key.pem")!!,
-            documentSigningKeyCert.ecPublicKey)
-
         val sdJwt = SdJwt.create(
-            issuerKey = documentSigningKey,
-            issuerAlgorithm = documentSigningKey.curve.defaultSigningAlgorithmFullySpecified,
-            issuerCertChain = X509CertChain(listOf(documentSigningKeyCert)),
+            issuerKey = signingKey,
+            issuerAlgorithm = signingKey.curve.defaultSigningAlgorithmFullySpecified,
+            issuerCertChain = signingCertificateChain,
             kbKey = null,
-            claims = identityAttributes,
+            claims = ticket.toJson() as JsonObject,
             nonSdClaims = buildJsonObject {
-                put("iss", "https://example-issuer.com")
+                put("iss", issuer)
                 put("vct", UtopiaMovieTicket.MOVIE_TICKET_VCT)
                 put("iat", timeSigned.epochSeconds)
                 put("nbf", validFrom.epochSeconds)

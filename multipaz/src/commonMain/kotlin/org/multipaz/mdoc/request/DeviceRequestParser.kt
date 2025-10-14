@@ -34,6 +34,7 @@ import org.multipaz.mdoc.zkp.ZkSystemSpec
  * @param encodedDeviceRequest the bytes of the `DeviceRequest` CBOR.
  * @param encodedSessionTranscript the bytes of `SessionTranscript`.
  */
+@Deprecated(message = "This class is deprecated, use DeviceRequest instead.")
 class DeviceRequestParser(
     private val encodedDeviceRequest: ByteArray,
     private val encodedSessionTranscript: ByteArray
@@ -196,9 +197,7 @@ class DeviceRequestParser(
 
                     // parse nameSpaces
                     val nameSpaces = itemsRequest["nameSpaces"]
-                    if (nameSpaces != null) {
-                      parseNamespaces(nameSpaces, builder)
-                    }
+                    parseNamespaces(nameSpaces, builder)
                     _docRequests.add(builder.build())
                 }
             }

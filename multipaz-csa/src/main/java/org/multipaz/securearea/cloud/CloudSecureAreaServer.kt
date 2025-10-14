@@ -34,14 +34,13 @@ import org.multipaz.util.AndroidAttestationExtensionParser
 import org.multipaz.util.Logger
 import org.multipaz.util.toHex
 import org.multipaz.util.validateAndroidKeyAttestation
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlinx.datetime.DateTimePeriod
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -51,6 +50,10 @@ import org.multipaz.cbor.buildCborArray
 import org.multipaz.crypto.JsonWebSignature
 import org.multipaz.securearea.cloud.CloudSecureAreaProtocol.BatchCreateKeyResponse1
 import org.multipaz.util.toBase64Url
+import org.multipaz.certext.CloudKeyAttestation
+import org.multipaz.certext.MultipazExtension
+import org.multipaz.certext.toCbor
+import org.multipaz.device.AndroidKeystoreSecurityLevel
 import java.nio.ByteBuffer
 import java.util.Locale
 import kotlin.random.Random
@@ -100,10 +103,12 @@ class CloudSecureAreaServer(
     private val cloudRootAttestationKeyCertification: X509CertChain,
     private val e2eeKeyLimitSeconds: Int,
     private val iosReleaseBuild: Boolean,
-    private val iosAppIdentifier: String?,
+    private val iosAppIdentifiers: List<String>,
     private val androidGmsAttestation: Boolean,
     private val androidVerifiedBootGreen: Boolean,
     private val androidAppSignatureCertificateDigests: List<ByteString>,
+    private val androidAppPackageNames: List<String>,
+    private val androidKeystoreSecurityLevel: AndroidKeystoreSecurityLevel,
     private val openid4vciKeyAttestationIssuer: String?,
     private val openid4vciKeyAttestationKeyStorage: String?,
     private val openid4vciKeyAttestationUserAuthentication: String?,
@@ -177,10 +182,12 @@ class CloudSecureAreaServer(
                 DeviceAttestationValidationData(
                     attestationChallenge = state.attestationChallenge!!,
                     iosReleaseBuild = iosReleaseBuild,
-                    iosAppIdentifier = iosAppIdentifier,
+                    iosAppIdentifiers = iosAppIdentifiers.toSet(),
                     androidGmsAttestation = androidGmsAttestation,
                     androidVerifiedBootGreen = androidVerifiedBootGreen,
-                    androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests
+                    androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests.toSet(),
+                    androidAppPackageNames = androidAppPackageNames.toSet(),
+                    androidRequiredKeyMintSecurityLevel = androidKeystoreSecurityLevel
                 )
             )
         } catch (e: Throwable) {
@@ -199,7 +206,9 @@ class CloudSecureAreaServer(
                     challenge = ByteString(state.cloudChallenge!!),
                     requireGmsAttestation = androidGmsAttestation,
                     requireVerifiedBootGreen = androidVerifiedBootGreen,
-                    requireAppSignatureCertificateDigests = androidAppSignatureCertificateDigests
+                    requireAppSignatureCertificateDigests = androidAppSignatureCertificateDigests.toSet(),
+                    requireAppPackages = androidAppPackageNames.toSet(),
+                    requireKeyMintSecurityLevel = androidKeystoreSecurityLevel
                 )
                 // Check that device created the key without user authentication.
                 val attestation = AndroidAttestationExtensionParser(request1.deviceBindingKeyAttestation!!.certificates[0])
@@ -234,13 +243,15 @@ class CloudSecureAreaServer(
                     .setAuthorityKeyIdentifierToCertificate(cloudRootAttestationKeyCertification.certificates[0])
                     .setKeyUsage(setOf(X509KeyUsage.DIGITAL_SIGNATURE))
                     .addExtension(
-                        oid = OID.X509_EXTENSION_MULTIPAZ_KEY_ATTESTATION.oid,
+                        oid = OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid,
                         critical = false,
-                        value = CloudAttestationExtension(
-                            challenge = ByteString(request1.deviceChallenge),
-                            passphrase = false,
-                            userAuthentication = setOf()
-                        ).encode().toByteArray()
+                        value = MultipazExtension(
+                            cloudKeyAttestation = CloudKeyAttestation(
+                                challenge = ByteString(request1.deviceChallenge),
+                                passphrase = false,
+                                userAuthentication = setOf()
+                            )
+                        ).toCbor()
                     )
                     .build()
             ) + cloudRootAttestationKeyCertification.certificates
@@ -454,7 +465,9 @@ class CloudSecureAreaServer(
                     challenge = ByteString(state.cloudChallenge!!),
                     requireGmsAttestation = androidGmsAttestation,
                     requireVerifiedBootGreen = androidVerifiedBootGreen,
-                    requireAppSignatureCertificateDigests = androidAppSignatureCertificateDigests
+                    requireAppSignatureCertificateDigests = androidAppSignatureCertificateDigests.toSet(),
+                    requireAppPackages = androidAppPackageNames.toSet(),
+                    requireKeyMintSecurityLevel = androidKeystoreSecurityLevel
                 )
                 // Check that device created the key with the requested user authentication.
                 val attestation = AndroidAttestationExtensionParser(request1.localKeyAttestation!!.certificates[0])
@@ -505,13 +518,15 @@ class CloudSecureAreaServer(
                 }
             ))
             .addExtension(
-                oid = OID.X509_EXTENSION_MULTIPAZ_KEY_ATTESTATION.oid,
+                oid = OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid,
                 critical = false,
-                value = CloudAttestationExtension(
-                    challenge = ByteString(state.challenge!!),
-                    passphrase = state.passphraseRequired,
-                    userAuthentication = CloudUserAuthType.decodeSet(state.userAuthenticationTypes)
-                ).encode().toByteArray()
+                value = MultipazExtension(
+                    cloudKeyAttestation = CloudKeyAttestation(
+                        challenge = ByteString(state.challenge!!),
+                        passphrase = state.passphraseRequired,
+                        userAuthentication = CloudUserAuthType.decodeSet(state.userAuthenticationTypes)
+                    )
+                ).toCbor()
             )
             .build()
 
@@ -571,7 +586,9 @@ class CloudSecureAreaServer(
                         challenge = ByteString(state.cloudChallenge!!),
                         requireGmsAttestation = androidGmsAttestation,
                         requireVerifiedBootGreen = androidVerifiedBootGreen,
-                        requireAppSignatureCertificateDigests = androidAppSignatureCertificateDigests
+                        requireAppSignatureCertificateDigests = androidAppSignatureCertificateDigests.toSet(),
+                        requireAppPackages = androidAppPackageNames.toSet(),
+                        requireKeyMintSecurityLevel = androidKeystoreSecurityLevel
                     )
                     // Check that device created the key with the requested user authentication.
                     val attestation = AndroidAttestationExtensionParser(localKeyAttestation.certificates[0])
@@ -629,13 +646,15 @@ class CloudSecureAreaServer(
                     )
                 )
                 .addExtension(
-                    oid = OID.X509_EXTENSION_MULTIPAZ_KEY_ATTESTATION.oid,
+                    oid = OID.X509_EXTENSION_MULTIPAZ_EXTENSION.oid,
                     critical = false,
-                    value = CloudAttestationExtension(
-                        challenge = ByteString(state.challenge!!),
-                        passphrase = state.passphraseRequired,
-                        userAuthentication = CloudUserAuthType.decodeSet(state.userAuthenticationTypes)
-                    ).encode().toByteArray()
+                    value = MultipazExtension(
+                        cloudKeyAttestation = CloudKeyAttestation(
+                            challenge = ByteString(state.challenge!!),
+                            passphrase = state.passphraseRequired,
+                            userAuthentication = CloudUserAuthType.decodeSet(state.userAuthenticationTypes)
+                        )
+                    ).toCbor()
                 )
                 .build()
             remoteKeyAttestationLeafs.add(attestationCert)

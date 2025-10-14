@@ -75,7 +75,7 @@ import co.nstant.in.cbor.model.DataItem;
 import co.nstant.in.cbor.model.Map;
 import co.nstant.in.cbor.model.UnicodeString;
 
-class KeystoreIdentityCredential extends IdentityCredential {
+public class KeystoreIdentityCredential extends IdentityCredential {
 
     private static final String TAG = "KSIdentityCredential"; // limit to <= 23 chars
     private final KeystorePresentationSession mPresentationSession;
@@ -735,14 +735,25 @@ class KeystoreIdentityCredential extends IdentityCredential {
 
     @Override
     public @NonNull
+    List<List<X509Certificate>> getAuthKeyChainsNeedingCertification(byte[] challenge) {
+        return mData.getAuthKeyChainsNeedingCertification(challenge);
+    }
+
+    @Override
+    public @NonNull
     Collection<X509Certificate> getAuthKeysNeedingCertification() {
         return mData.getAuthKeysNeedingCertification();
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public void storeStaticAuthenticationData(@NonNull X509Certificate authenticationKey,
-            @NonNull byte[] staticAuthData) throws UnknownAuthenticationKeyException {
+        @NonNull byte[] staticAuthData) throws UnknownAuthenticationKeyException {
+        mData.storeStaticAuthenticationData(authenticationKey, null, staticAuthData);
+    }
+
+    @Override
+    public void storeStaticAuthenticationData(@NonNull PublicKey authenticationKey,
+        @NonNull byte[] staticAuthData) throws UnknownAuthenticationKeyException {
         mData.storeStaticAuthenticationData(authenticationKey, null, staticAuthData);
     }
 
@@ -755,6 +766,14 @@ class KeystoreIdentityCredential extends IdentityCredential {
         mData.storeStaticAuthenticationData(authenticationKey, expirationDate, staticAuthData);
     }
 
+    @Override
+    public void storeStaticAuthenticationData(
+        @NonNull PublicKey authenticationKey,
+        @NonNull Calendar expirationDate,
+        @NonNull byte[] staticAuthData)
+        throws UnknownAuthenticationKeyException {
+        mData.storeStaticAuthenticationData(authenticationKey, expirationDate, staticAuthData);
+    }
 
     @Override
     public @NonNull
@@ -851,6 +870,18 @@ class KeystoreIdentityCredential extends IdentityCredential {
             throw new IllegalStateException("Error loading data");
         }
         return mData.getCredentialKeyAlias();
+    }
+
+    /**
+     * Gets a list of certified authentication keys.
+     *
+     * @return the certified authentication keys aliases and associated issuer-provided data.
+     */
+    public @NonNull List<kotlin.Pair<String, byte[]>> getAuthenticationKeys() {
+        if (!loadData()) {
+            throw new IllegalStateException("Error loading data");
+        }
+        return mData.getAuthenticationKeys();
     }
 
     @Override

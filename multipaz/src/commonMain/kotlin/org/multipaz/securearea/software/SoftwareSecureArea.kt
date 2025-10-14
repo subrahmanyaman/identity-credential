@@ -56,7 +56,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
 
     private val supportedAlgorithms_: List<Algorithm> by lazy {
         Algorithm.entries.filter {
-            it.fullySpecified && Crypto.supportedCurves.contains(it.curve!!)
+            it.fullySpecified && it.curve != null && Crypto.supportedCurves.contains(it.curve)
         }
     }
 
@@ -76,9 +76,15 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
             createKeySettings
         } else {
             // If user passed in a generic SecureArea.CreateKeySettings, honor them.
-            SoftwareCreateKeySettings.Builder()
+            val builder = SoftwareCreateKeySettings.Builder()
                 .setAlgorithm(createKeySettings.algorithm)
-                .build()
+            if (createKeySettings.validFrom != null && createKeySettings.validUntil != null) {
+                builder.setValidityPeriod(
+                    validFrom = createKeySettings.validFrom,
+                    validUntil = createKeySettings.validUntil
+                )
+            }
+            builder.build()
         }
         try {
             val privateKey = Crypto.createEcPrivateKey(settings.algorithm.curve!!)
@@ -303,7 +309,7 @@ class SoftwareSecureArea private constructor(private val storageTable: StorageTa
         return false
     }
 
-    @CborSerializable(schemaHash = "s3fitojNQkNiyyWqszh98yfetQJdp-anpxmfq1wnyCY")
+    @CborSerializable(schemaHash = "uDNIH6LIvDH5IXbAKIX7aVmFeEJwBUZAd7s7prLKBBw")
     internal data class KeyMetadata(
         val algorithm: Algorithm,
         val passphraseRequired: Boolean,

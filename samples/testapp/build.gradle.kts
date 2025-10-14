@@ -23,6 +23,11 @@ buildConfig {
 }
 
 kotlin {
+    compilerOptions {
+        optIn.add("kotlin.time.ExperimentalTime")
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     androidTarget {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         compilerOptions {
@@ -98,9 +103,7 @@ kotlin {
                 implementation(project(":multipaz-longfellow"))
                 implementation(project(":multipaz-models"))
                 implementation(project(":multipaz-doctypes"))
-                implementation(project(":multipaz-provisioning-api"))
                 implementation(project(":multipaz-compose"))
-                implementation(project(":multipaz-mlkit"))
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.kotlinx.io.core)
                 implementation(libs.ktor.client.core)
@@ -108,6 +111,8 @@ kotlin {
                 implementation(libs.kotlinx.serialization.json)
                 implementation(libs.ktor.client.content.negotiation)
                 implementation(libs.ktor.serialization.kotlinx.json)
+                implementation(libs.coil.compose)
+                implementation(libs.coil.ktor2)
             }
         }
     }
@@ -182,3 +187,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().all {
 tasks["compileKotlinIosX64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosArm64"].dependsOn("kspCommonMainKotlinMetadata")
 tasks["compileKotlinIosSimulatorArm64"].dependsOn("kspCommonMainKotlinMetadata")
+
+subprojects {
+	apply(plugin = "org.jetbrains.dokka")
+}
