@@ -90,14 +90,15 @@ class X509Cert(
         ASN1.decode(encodedCertificate)!! as ASN1Sequence
     }
 
-    private val tbsCert: ASN1Sequence by lazy {
-        parsedCert.elements[0] as ASN1Sequence
+    private val tbsCert: NormalizedTbs by lazy {
+        NormalizedTbs.from(parsedCert.elements[0] as ASN1Sequence)
     }
 
     /**
      * The certificate version.
      *
-     * This returns the encoded value and for X.509 Version 3 Certificate this value is 2.
+     * This returns the encoded value and for X.509 Version 3 Certificate (the most common
+     * version in use) this value is 2.
      */
     val version: Int
         get() {
@@ -140,7 +141,7 @@ class X509Cert(
      * The bytes of TBSCertificate.
      */
     val tbsCertificate: ByteArray
-        get() = ASN1.encode(tbsCert)
+        get() = ASN1.encode(tbsCert.tbs)
 
     /**
      * The certificate signature.
@@ -395,8 +396,7 @@ class X509Cert(
      */
     class Builder(
         private val publicKey: EcPublicKey,
-        private val signingKey: EcPrivateKey,
-        private val signatureAlgorithm: Algorithm,
+        private val signingKey: SigningKey,
         private val serialNumber: ASN1Integer,
         private val subject: X500Name,
         private val issuer: X500Name,
@@ -405,7 +405,7 @@ class X509Cert(
     ) {
         private data class Extension(
             val critical: Boolean,
-            val value: ByteArray
+            val value: ByteString
         )
         private val extensions = mutableMapOf<String, Extension>()
 
@@ -421,7 +421,7 @@ class X509Cert(
          * @return the builder.
          */
         fun addExtension(oid: String, critical: Boolean, value: ByteArray): Builder {
-            extensions.put(oid, Extension(critical, value))
+            extensions.put(oid, Extension(critical, ByteString(value)))
             return this
         }
 
@@ -432,7 +432,7 @@ class X509Cert(
          * @return the builder
          */
         fun addExtension(extension: X509Extension): Builder {
-            extensions.put(extension.oid, Extension(extension.isCritical, extension.data.toByteArray()))
+            extensions.put(extension.oid, Extension(extension.isCritical, extension.data))
             return this
         }
 
@@ -537,8 +537,9 @@ class X509Cert(
          *
          * @return the built [X509Cert].
          */
-        fun build(): X509Cert {
-            val signatureAlgorithmSeq = signatureAlgorithm.getSignatureAlgorithmSeq(signingKey.curve)
+        suspend fun build(): X509Cert {
+            val signatureAlgorithmSeq =
+                signingKey.algorithm.getSignatureAlgorithmSeq(signingKey.publicKey.curve)
 
             val subjectPublicKey = when (publicKey) {
                 is EcPublicKeyDoubleCoordinate -> {
@@ -562,12 +563,7 @@ class X509Cert(
             val validFromTruncated = Instant.fromEpochSeconds(validFrom.epochSeconds)
             val validUntilTruncated = Instant.fromEpochSeconds(validUntil.epochSeconds)
             val tbsCertObjs = mutableListOf(
-                ASN1TaggedObject(
-                    ASN1TagClass.CONTEXT_SPECIFIC,
-                    ASN1Encoding.CONSTRUCTED,
-                    0,
-                    ASN1.encode(ASN1Integer(2L))
-                ),
+                versionObject(2L),
                 serialNumber,
                 signatureAlgorithmSeq,
                 generateName(issuer),
@@ -615,14 +611,14 @@ class X509Cert(
                                 listOf(
                                     ASN1ObjectIdentifier(oid),
                                     ASN1Boolean(true),
-                                    ASN1OctetString(ext.value)
+                                    ASN1OctetString(ext.value.toByteArray())
                                 )
                             )
                         } else {
                             ASN1Sequence(
                                 listOf(
                                     ASN1ObjectIdentifier(oid),
-                                    ASN1OctetString(ext.value)
+                                    ASN1OctetString(ext.value.toByteArray())
                                 )
                             )
                         }
@@ -639,17 +635,13 @@ class X509Cert(
             val tbsCert = ASN1Sequence(tbsCertObjs)
 
             val encodedTbsCert = ASN1.encode(tbsCert)
-            val signature = Crypto.sign(
-                signingKey,
-                signatureAlgorithm,
-                encodedTbsCert
-            )
-            val encodedSignature = when (signatureAlgorithm) {
+            val signature = signingKey.sign(encodedTbsCert)
+            val encodedSignature = when (signingKey.algorithm) {
                 Algorithm.ES256, Algorithm.ESP256, Algorithm.ESB256,
                 Algorithm.ES384, Algorithm.ESP384, Algorithm.ESB384, Algorithm.ESB320,
                 Algorithm.ES512, Algorithm.ESP512, Algorithm.ESB512 -> signature.toDerEncoded()
                 Algorithm.EDDSA, Algorithm.ED25519, Algorithm.ED448 -> signature.r + signature.s
-                else -> throw IllegalArgumentException("Unsupported signature algorithm $signatureAlgorithm")
+                else -> throw IllegalArgumentException("Unsupported signature algorithm ${signingKey.algorithm}")
             }
             val cert = ASN1Sequence(listOf(
                 tbsCert,
@@ -660,6 +652,44 @@ class X509Cert(
         }
     }
 }
+
+/**
+ * View of the certificate structure without omitted default fields (specifically, version,
+ * which is often omitted for X.509 v1 certificates.
+ */
+private class NormalizedTbs private constructor(
+    /** Raw TBS sequence */
+    val tbs: ASN1Sequence,
+    /** TBS sequence with the default fields added */
+    val elements: List<ASN1Object>
+) {
+    companion object Companion {
+        /** Creates [NormalizedTbs] from the actual TBS data in the certificate. */
+        fun from(tbs: ASN1Sequence): NormalizedTbs {
+            val first = tbs.elements.first()
+            // Version is optional and is often omitted for v1 certificates
+            val elements = if (first is ASN1TaggedObject && first.tag == 0) {
+                tbs.elements
+            } else {
+                // "insert" omitted version tag, so that the rest of the code does
+                // not have to worry about it
+                listOf(versionObject(0L)) + tbs.elements
+            }
+            return NormalizedTbs(
+                tbs = tbs,
+                elements = elements
+            )
+        }
+    }
+}
+
+private fun versionObject(version: Long): ASN1TaggedObject =
+    ASN1TaggedObject(
+        ASN1TagClass.CONTEXT_SPECIFIC,
+        ASN1Encoding.CONSTRUCTED,
+        0,
+        ASN1.encode(ASN1Integer(version))
+    )
 
 private fun Algorithm.getSignatureAlgorithmSeq(signingKeyCurve: EcCurve): ASN1Sequence {
     val signatureAlgorithmOid = when (this) {
@@ -747,10 +777,9 @@ private fun generateName(name: X500Name): ASN1Sequence {
  * @param builderAction the builder action.
  * @return a [X509Cert].
  */
-fun buildX509Cert(
+suspend fun buildX509Cert(
     publicKey: EcPublicKey,
-    signingKey: EcPrivateKey,
-    signatureAlgorithm: Algorithm,
+    signingKey: SigningKey,
     serialNumber: ASN1Integer,
     subject: X500Name,
     issuer: X500Name,
@@ -761,7 +790,6 @@ fun buildX509Cert(
     val builder = X509Cert.Builder(
         publicKey = publicKey,
         signingKey = signingKey,
-        signatureAlgorithm = signatureAlgorithm,
         serialNumber = serialNumber,
         subject = subject,
         issuer = issuer,
